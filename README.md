@@ -18,7 +18,7 @@ ollama pull llama3.1:8b && ollama pull nomic-embed-text
 secret-agent --demo                            # retrieval on vs off
 secret-agent --rag "when does Driftwood close a batch?"
 python -m secret_agent.rag.eval --ablate       # the retrieval numbers
-pytest                                          # 167 offline
+pytest                                          # 210 offline
 pytest -m live -o addopts=""                    # 9 against real ollama
 ```
 
@@ -36,8 +36,15 @@ permission layer took one because it didn't.
 I'd rather the history show that than tidy it into a fake commit-a-day.
 
 The `MISTAKES.md` file is committed for the same reason. Every error in it is
-one I actually hit here, including three where I wrote a confident claim into
-a docstring and the measurement later contradicted it.
+one I actually hit here, including four where I wrote a confident claim into a
+docstring and the measurement later contradicted it.
+
+`REVIEW-2026-07-25.md` is committed for a stronger version of the same reason.
+When the build was finished I ran a hostile external review over it, with
+instructions that "strong work, minor nits" would count as a *failed* review.
+It found a total sandbox escape, among other things. That document is the full
+audit trail: every finding, how it was verified, what was fixed, and the one
+finding I looked at and refused.
 
 ---
 
@@ -112,7 +119,10 @@ the eval harness rather than any model improvement — the parser was doing the
 work and the model was getting the credit.
 
 `scripts/repair_rate.py` runs the same ten tasks through the real loop across
-several models:
+several models. **This is one sampled run, not a fixed measurement** — the
+completion counts come from live generation and will differ if you re-run it.
+The stable claim is the *direction*: llama emits clean JSON, the code-tuned
+model fences almost everything.
 
 | model | temp | completions | w/ calls | repaired | rate |
 |---|---|---|---|---|---|
@@ -134,6 +144,11 @@ fence-stripping disabled, and qwen scores ~70% worse. It is not 70% worse.
 That entire gap would be my parser, and it would look exactly like a
 capability difference.
 
+One run per cell is thin, and the 0% cells are the weaker half of the
+evidence — "0 out of 11" is consistent with a low rate, not only with zero.
+The 70% cell is the robust one: seven fenced calls out of ten is not a
+sampling accident.
+
 Which also means I have to walk back my own framing above. "A small local
 model emits messy tool calls" is what I expected and it is not what these two
 llama models did — the fixture suite in `tests/fixtures/malformed.py` covers
@@ -150,7 +165,8 @@ printing the rate.
 
 > **An external adversarial review on 2026-07-25 broke this section
 > completely.** What follows is the corrected version; the failure is written
-> up in `MISTAKES.md` #12–14 and is more instructive than the design. Short
+> up in full in `REVIEW-2026-07-25.md`, summarised in `MISTAKES.md` #12–14,
+> and is more instructive than the design. Short
 > version: `python` was on the bash allowlist, so the sandbox was not a
 > sandbox, and bash never called the path-confinement function at all.
 
@@ -409,6 +425,10 @@ being finished rather than needing expansion.
 
 ## Reading the docs in here
 
+- `REVIEW-2026-07-25.md` — **the full external-review audit trail.** Every
+  finding, the command that verified it, the fix, the one finding refused and
+  why, and the attacks that held. Start here if you care whether the security
+  claims are real.
 - `DECISIONS.md` — choices made and, more usefully, what was rejected and why
 - `MISTAKES.md` — errors hit during the build, with the mechanism that let
   each one survive

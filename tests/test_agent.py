@@ -382,3 +382,33 @@ def test_both_calls_are_recorded_for_a_parallel_turn(reg, cfg):
     run = a.run("x")
     msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
     assert '"a"' in msg.content and '"b"' in msg.content
+
+
+def test_an_array_of_calls_is_not_written_into_history_twice(reg, cfg):
+    """Regression, external review 2026-07-25.
+
+    When ONE JSON span parses to an array of N calls, every ToolCall.raw is
+    that same whole span -- parsing sets raw to the enclosing text, not the
+    individual element. Extending naively put the array into history N times:
+    token bloat, plus N duplicate call records for the model to read back.
+    """
+    two = '[{"name": "echo", "arguments": {"text": "a"}}, ' \
+          '{"name": "echo", "arguments": {"text": "b"}}]'
+    a = Agent(reg, Scripted(two, "done"), cfg)
+    run = a.run("x")
+    msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
+    assert msg.content.count('"name": "echo"') == 2   # the array, once
+    assert msg.content == two
+    assert len(run.steps[0].results) == 2             # both still executed
+
+
+def test_separate_spans_are_both_kept(reg, cfg):
+    """The other side of the dedup: two DIFFERENT calls in two separate JSON
+    objects must both survive. Deduping on raw must not collapse those."""
+    two = ('{"name": "echo", "arguments": {"text": "a"}}\n'
+           '{"name": "echo", "arguments": {"text": "b"}}')
+    a = Agent(reg, Scripted(two, "done"), cfg)
+    run = a.run("x")
+    msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
+    assert msg.content.count('"name": "echo"') == 2
+    assert '"a"' in msg.content and '"b"' in msg.content
