@@ -372,7 +372,7 @@ gap until a review corrected two gold labels, which cuts in favour of the
 "it's noise" reading: had I acted on the original result, I would now be
 defending a default chosen on evidence that had since halved.) The documented
 behaviour is the better prior when the evidence is this thin. It's logged as
-an open question in `LEARNING-STATUS.md` rather than quietly resolved in
+an open question in my working notes rather than quietly resolved in
 whichever direction happened to win one run.
 
 The ablation earned its place by contradicting me.
@@ -432,6 +432,4 @@ being finished rather than needing expansion.
 - `DECISIONS.md` — choices made and, more usefully, what was rejected and why
 - `MISTAKES.md` — errors hit during the build, with the mechanism that let
   each one survive
-- `LEARNING-STATUS.md` — what I can defend cold, what I can't yet, and open
-  questions
 - `corpus/README.md` — why the corpus is fictional and where the eval is weak
