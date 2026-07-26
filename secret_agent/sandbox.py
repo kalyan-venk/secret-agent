@@ -122,6 +122,26 @@ def relative(p: Path, root: Path) -> str:
 # Files that exist in most repos and that a model has no business reading.
 # Belt and braces on top of confinement -- these are all INSIDE the root, so
 # path checking doesn't touch them.
+#
+# ## What this does not do, stated plainly
+#
+# Name matching only. `prod-token.txt`, `config/api_keys.json` and
+# `deploy_secrets.txt` all sail straight through, because nothing here looks
+# at content. An external review raised this on 2026-07-25 and explicitly
+# declined to score it as a finding, on the grounds that this is a
+# belt-and-braces layer and not the confinement boundary. That reading is
+# right and it is worth writing down anyway, because the failure mode is a
+# reader assuming the opposite: **this list reduces the chance of an accident,
+# it does not make credential exposure impossible.** Anything genuinely
+# sensitive belongs outside the project root, where confinement applies.
+#
+# Content-sniffing (entropy, `KEY=`-shaped lines) was considered and rejected:
+# it false-positives on test fixtures and example configs, and a guard that
+# blocks reading `.env.example` trains the user to switch it off.
+#
+# Before the review this was worse than described -- `bash` never consulted
+# it at all, so `cat .env` returned what `read_file(".env")` refused. See
+# MISTAKES.md #14.
 SECRET_NAMES = {
     ".env", ".env.local", ".env.production",
     "id_rsa", "id_ed25519", ".netrc", ".pgpass",

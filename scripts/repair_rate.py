@@ -17,7 +17,11 @@ I know that failure mode specifically: on an earlier project a headline
 "a headline improvement improvement" turned out on audit to be mostly markdown-fence
 stripping in the eval harness. This script is what would have caught it.
 
-## The result (2026-07-25, 10 tasks each)
+## The result (2026-07-25, 10 tasks each, ONE run per cell)
+
+Read the direction, not the digits. These counts come from live generation, so
+re-running gives different completion totals. Flagged in review because the
+table below reads like a fixed measurement and is not one.
 
     model                temp  completions  w/ calls  repaired    rate
     llama3.1:8b           0.1           21        11         0     0.0%
@@ -44,6 +48,13 @@ Temperature had no visible effect on either llama model, which also surprised
 me -- I had assumed higher temperature would degrade format adherence. Ten
 tasks per cell is too few to say it has *no* effect, only that it's smaller
 than the model-to-model difference.
+
+One more caveat worth stating, since it cuts against my own headline: the 0%
+cells are weaker evidence than the 70% cell. "0 repairs out of 11 tool calls"
+is consistent with a genuinely low rate rather than a zero one, and a single
+run cannot tell those apart. Seven fences out of ten is not a sampling
+accident. So the defensible claim is "the code-tuned model fences constantly
+and the llamas mostly don't", not "llama never fences".
 """
 
 from __future__ import annotations
