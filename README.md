@@ -26,9 +26,8 @@ pytest -m live -o addopts=""                    # 9 against real ollama
 
 ## On the commit history
 
-This was built as a marathon — a single long push with
-[Claude Code](https://claude.ai/code) as a pair, rather than an hour a night
-over three weeks. So the timestamps cluster, and some phases have a dozen
+This was built as a marathon — one long push rather than an hour a night over
+three weeks. So the timestamps cluster, and some phases have a dozen
 commits while others have one. That's what the work actually looked like:
 parsing took nine commits because it kept breaking in new ways, and the
 permission layer took one because it didn't.
@@ -52,9 +51,8 @@ finding I looked at and refused.
 
 Two reasons, and the second is the real one.
 
-**Practical:** this machine has a Claude subscription, not an API key. The CLI
-authenticates over OAuth and there's no key to hand a Python process. Ollama
-needs no key and costs nothing per token.
+**Practical:** there's no API key on this machine to hand a Python process.
+Ollama needs no key and costs nothing per token.
 
 **The actual reason:** small local models produce *bad* tool calls — fenced
 JSON, single quotes, trailing commas, arguments double-encoded as a string,
@@ -372,8 +370,8 @@ gap until a review corrected two gold labels, which cuts in favour of the
 "it's noise" reading: had I acted on the original result, I would now be
 defending a default chosen on evidence that had since halved.) The documented
 behaviour is the better prior when the evidence is this thin. It's logged as
-an open question in my working notes rather than quietly resolved in
-whichever direction happened to win one run.
+an open question rather than quietly resolved in whichever direction happened
+to win one run.
 
 The ablation earned its place by contradicting me.
 

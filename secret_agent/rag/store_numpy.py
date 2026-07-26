@@ -4,7 +4,7 @@ Written before reaching for Chroma, deliberately. The point of doing it this
 way first is that a vector database stops being magic: it is a matrix of
 normalised vectors, a dot product, and an argsort. Everything a real one adds
 -- persistence, an ANN index, metadata filtering, concurrent writes -- is a
-scaling concern layered on top of these fifteen lines, not a different idea.
+scaling concern layered on top of these fifteen lines.
 
 Exact search, no approximation. At 60-ish chunks that's a 60x768 matmul,
 which is microseconds. ANN indexes (HNSW, IVF) exist because exact search is

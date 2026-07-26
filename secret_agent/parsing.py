@@ -263,8 +263,6 @@ def loads_forgiving(raw: str) -> tuple[Any | None, list[str]]:
             return obj, repairs
         except json.JSONDecodeError:
             pass
-    else:
-        cleaned = raw
 
     # 2. unclosed braces/brackets -- count and append what's missing
     closed = _close_unbalanced(cleaned)
@@ -329,8 +327,8 @@ def _close_unbalanced(s: str) -> str:
 # normalising whatever shape came back
 # ---------------------------------------------------------------------------
 
-# The model does not reliably use the key names you asked for. These are the
-# ones I actually observed, not a defensive guess.
+# The model does not reliably use the key names you asked for. Every one of
+# these turned up in a real completion at some point.
 _NAME_KEYS = ("name", "tool", "tool_name", "function", "action", "recipient_name")
 _ARG_KEYS = ("arguments", "args", "parameters", "params", "tool_input", "input", "action_input")
 
@@ -431,8 +429,6 @@ def _looks_deliberate(obj: Any, repairs: list[str]) -> bool:
     leftovers means no.
     """
     if "flattened_args" in repairs:
-        return False
-    if not isinstance(obj, dict):
         return False
     return any(k in obj for k in _ARG_KEYS) or isinstance(obj.get("function"), dict)
 
@@ -543,8 +539,9 @@ def parse_tool_calls(text: str, known_names: set[str] | None = None) -> ParseRes
 def parse_native_tool_calls(raw_calls: list[dict[str, Any]]) -> ParseResult:
     """Ollama's native tools path. Structured already, so this is a rename.
 
-    Kept alongside the messy path so the two can be compared -- that
-    comparison is the honest way to show what the parser above is buying you.
+    Kept alongside the messy path so the two can be run against each other.
+    Without that comparison there is no way to say what the ladder above is
+    buying you, only that it exists.
     """
     STATS.completions += 1
     res = ParseResult()

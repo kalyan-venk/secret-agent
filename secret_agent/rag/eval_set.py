@@ -106,7 +106,7 @@ QUERIES: list[EvalQuery] = [
     ),
 
     # --- low lexical overlap: phrased the way someone who hadn't read the
-    # docs would phrase it. These are the honest ones.
+    # docs would phrase it
     EvalQuery(
         "If I try to remove data that Legal has frozen, what comes back?",
         ("retention.md",), "MER-4471", "low",

@@ -1,7 +1,7 @@
 """Splitting documents into retrievable pieces.
 
-Chunk size and overlap are decisions, not defaults, so here is the reasoning
-rather than two numbers with no history.
+Chunk size and overlap got picked for reasons. The reasons are below, because
+two bare numbers in a config file are impossible to argue with later.
 
 ## What chunk size trades off against
 

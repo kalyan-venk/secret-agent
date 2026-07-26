@@ -111,5 +111,4 @@ class Config:
 
     @property
     def history_budget(self) -> int:
-        """Tokens available for conversation history, i.e. not the reply."""
         return self.num_ctx - self.response_reserve_tokens

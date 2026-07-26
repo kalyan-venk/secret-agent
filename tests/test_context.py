@@ -17,8 +17,6 @@ from secret_agent.tools.base import ToolResult
 
 
 class FakeSummarizer:
-    """Returns a fixed summary and counts how many times it was asked."""
-
     def __init__(self, text="Earlier: user asked about config.py, we edited line 40."):
         self.text = text
         self.calls = 0
@@ -78,17 +76,11 @@ _MEASURED = [
 def test_approx_never_undercounts_any_content_type(label, text, real):
     """The property the previous estimator CLAIMED in a comment and did not have.
 
-    An external review found the old version undercounting code by 47%,
-    digits by 54% and emoji by 92%, while a comment directly above it said the
-    buckets were "chosen to sit BELOW every measured value so the estimate
-    errs toward overcounting". It was safe on precisely the two content types
-    it had been calibrated against.
-
-    Undercounting is the dangerous direction: it means believing there is
-    room when there isn't, and the payload silently overflows.
-
-    A claim about all inputs belongs in a test, not a comment. See MISTAKES.md
-    #15.
+    It undercounted code by 47% and emoji by 92% while a comment directly
+    above it asserted the opposite; the full table and the retune are in
+    context.py. What matters here is that a claim about all inputs belongs in
+    a test, where it gets checked, and not in a comment, where it doesn't.
+    See MISTAKES.md #15.
     """
     assert approx(text) >= real, (
         f"{label}: estimated {approx(text)} but the real count is {real} -- "
@@ -97,8 +89,8 @@ def test_approx_never_undercounts_any_content_type(label, text, real):
 
 
 def test_approx_does_not_overcount_absurdly():
-    """The other side of it. Erring high is safe; erring 5x high means
-    compacting constantly and paying for summarization that wasn't needed."""
+    # erring high is safe, but erring 5x high means compacting constantly and
+    # paying for summarization nothing needed
     for label, text, real in _MEASURED:
         assert approx(text) <= real * 2.0, f"{label}: {approx(text)} vs {real}"
 
@@ -112,7 +104,7 @@ def test_approx_is_close_enough_on_prose():
 
 def test_per_message_overhead_is_the_measured_value():
     # 10, from scripts/calibrate_tokens.py against llama3.1's chat template.
-    # This test exists so that changing it requires re-measuring, not guessing.
+    # Pinned so that anyone who wants a different number has to go re-measure.
     assert PER_MESSAGE_OVERHEAD == 10
 
 
