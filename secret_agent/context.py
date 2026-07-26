@@ -125,46 +125,82 @@ class TokenCounter:
         return sum(self.count_message(m) for m in conv.messages)
 
 
-# Measured against llama3.1:8b's own tokenizer, scripts/calibrate_tokens.py,
-# 2026-07-25. Columns are (punctuation density, actual chars per token):
+# Token estimation, second attempt.
 #
-#     prose          1.1%   4.71   chars/4 overcounts by 17%   (safe)
-#     code           4.0%   4.24   chars/4 overcounts by  5%   (safe)
-#     tool output    4.9%   3.85   chars/4 UNDERcounts by  4%  (not safe)
-#     json          34.8%   2.84   chars/4 UNDERcounts by 29%  (not safe)
+# ## Why there was a first attempt
 #
-# The headline: the chars/4 rule of thumb is tuned for English prose and
-# breaks down on exactly the content an agent history is full of. Braces,
-# quotes and colons each tend to be their own token. A history of tool calls
-# and JSON results is the worst case for it, and it fails toward
-# underestimating, which means you think you have room and you don't.
+# The original version bucketed on the density of eight characters ({}[]":,\)
+# and claimed in this very comment to be "chosen to sit BELOW every measured
+# value so the estimate errs toward overcounting". An external review checked
+# that claim against the real tokenizer and it was false:
 #
-# Four samples is a calibration, not a model. The buckets below are chosen to
-# sit BELOW every measured value so the estimate errs toward overcounting --
-# overcounting compacts a little early, undercounting silently overflows.
-_CPT_BUCKETS = (
-    (0.02, 4.3),   # prose. measured 4.71
-    (0.10, 3.8),   # code, tool output. measured 4.24 / 3.85
-    (1.00, 2.7),   # json. measured 2.84
-)
-_PUNCT_CHARS = frozenset('{}[]":,\\')
+#     content                approx   real   ratio
+#     code with operators       100    190   0.53   <- 47% UNDER
+#     digits                    102    220   0.46   <- 54% UNDER
+#     file paths / URLs         118    130   0.91   <- 9%  UNDER
+#     emoji                      18    224   0.08   <- 92% UNDER
+#     json (was calibrated)      96     85   1.13   ok
+#     prose (was calibrated)    104    101   1.03   ok
+#
+# It was safe on precisely the two content types I calibrated it against, and
+# badly unsafe everywhere else. `(a+b)*(c-d)` scores ~0% density because none
+# of `()+*-=` were in the set, so it got the prose divisor. Code is the most
+# common content in an agent history, so the estimator was worst exactly where
+# it mattered, and it fails toward believing there is room when there isn't --
+# which silently overflows the window, the failure this whole module exists to
+# prevent.
+#
+# ## What replaced it
+#
+# Per-character-class weights instead of one global divisor, because different
+# character classes genuinely tokenize at different rates and no single divisor
+# can span 0.36 chars/token (emoji) to 4.7 (prose). Each weight is set ABOVE
+# the measured rate so the estimate errs high.
+#
+#     class                 measured tokens/char   weight used
+#     letters and spaces           0.22               0.27
+#     digits                       0.54               0.60
+#     ASCII punctuation            ~0.79              0.85
+#     non-ASCII BMP (CJK)          0.87               1.10
+#     astral plane (emoji)         2.80               3.40
+#
+# Overcounting compacts slightly early, which costs a summarization call.
+# Undercounting silently truncates the prompt. Those are not symmetric, so
+# every weight rounds up.
+_W_LETTER = 0.27
+_W_DIGIT = 0.60
+_W_PUNCT = 0.85
+_W_WIDE = 1.10
+_W_ASTRAL = 3.40
 
 
 def approx(text: str) -> int:
-    """Cheap token estimate, deliberately biased high.
+    """Cheap token estimate, biased high -- and this time verified to be.
 
-    When the number has to be right, use TokenCounter(exact=True) -- that
-    asks the server to tokenize and is the model's own count. This is for the
-    thousands of counts per run where a round trip each would cost more than
-    the generation.
+    `tests/test_context.py::test_approx_never_undercounts_any_content_type`
+    pins the property that the previous version claimed and did not have.
+
+    When the number has to be right, use TokenCounter(exact=True): it asks the
+    server to tokenize and is the model's own count. This is for the thousands
+    of counts per run where a round trip each would cost more than generation.
     """
     if not text:
         return 0
-    density = sum(1 for c in text if c in _PUNCT_CHARS) / len(text)
-    for ceiling, cpt in _CPT_BUCKETS:
-        if density < ceiling:
-            return max(1, int(len(text) / cpt))
-    return max(1, int(len(text) / _CPT_BUCKETS[-1][1]))
+
+    total = 0.0
+    for ch in text:
+        o = ord(ch)
+        if o > 0xFFFF:
+            total += _W_ASTRAL      # emoji and friends, ~2.8 tokens each
+        elif o > 0x7F:
+            total += _W_WIDE        # CJK etc
+        elif ch.isalpha() or ch.isspace():
+            total += _W_LETTER
+        elif ch.isdigit():
+            total += _W_DIGIT
+        else:
+            total += _W_PUNCT       # every operator, bracket, quote, slash
+    return max(1, int(total) + 1)
 
 
 @dataclass

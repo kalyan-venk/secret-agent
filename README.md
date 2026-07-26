@@ -148,6 +148,12 @@ printing the rate.
 
 ## Guardrails
 
+> **An external adversarial review on 2026-07-25 broke this section
+> completely.** What follows is the corrected version; the failure is written
+> up in `MISTAKES.md` #12–14 and is more instructive than the design. Short
+> version: `python` was on the bash allowlist, so the sandbox was not a
+> sandbox, and bash never called the path-confinement function at all.
+
 Path confinement, then a permission layer, and they're independent — approval
 is not authorisation to escape the project root.
 
@@ -166,13 +172,40 @@ quietly omitted.
 `bash` is a different category from `write_file` even though both mutate.
 `write_file`'s blast radius is one resolved path you can inspect. `bash` hands
 off to a process whose reach is the whole filesystem and network, and no
-argument inspection bounds that. So: `shell=False` always (there is no shell,
-so `;` and `&&` and `` ` `` have nothing to interpret them), an **allowlist**
-rather than a blocklist, git restricted to read-only subcommands, and a
-scrubbed environment so the child doesn't inherit API keys.
+argument inspection bounds that.
 
-An allowlist because a blocklist is a claim that you enumerated every
-dangerous binary on a machine you've never seen.
+I wrote that paragraph, and then put `python` on the allowlist anyway. The
+review's exploit:
+
+```
+python3 -c 'open("/tmp/pwned","w").write("OWNED")'   → wrote outside the root
+cat /etc/passwd                                      → read outside the root
+cat .env                                             → read a credential file
+```
+
+`shell=False` protects you from `/bin/sh`. It does not protect you from
+handing the model a **different** shell, and an interpreter is one. And bash
+never called `safe_resolve` on its arguments at all — so the "independent
+layers" claim two paragraphs up was simply false for this tool. Approving one
+bash call escaped the root.
+
+What defends it now: no interpreters on the allowlist ever, **every
+path-shaped argument through the same `safe_resolve` the file tools use**,
+`looks_secret` on resolved arguments, flags like `find -exec` and
+`git --exec-path` refused, git limited to read-only subcommands, `shell=False`,
+scrubbed environment, 30s timeout.
+
+The lesson worth keeping is not "I forgot about python". It's that **an
+allowlist is only as strong as the least constrained program on it**, and
+"is this binary safe" turns out to be about as hard as "is this binary
+dangerous" — which was the entire argument for preferring an allowlist. `find`
+has `-exec`. `git` has `--exec-path`. I now maintain a blocklist *inside* the
+allowlist, which is exactly the smell I claimed to be avoiding.
+
+**This is defense in depth, not isolation, and the difference is not
+rhetorical.** Real isolation needs the OS — seatbelt, landlock, a container.
+Env scrubbing likewise: it stops env-var inheritance, but `HOME` is still
+forwarded and `~/.aws/credentials` is a file, not a variable.
 
 ---
 
@@ -263,11 +296,11 @@ query, and can search twice for a two-part question.
 
 | | k=1 | k=3 | k=5 |
 |---|---|---|---|
-| precision | 0.60 | 0.37 | 0.23 |
-| recall | 0.49 | 0.80 | 0.82 |
-| **hit rate** | **0.60** | **0.85** | **0.90** |
+| precision | 0.60 | 0.38 | 0.23 |
+| recall | 0.50 | 0.83 | 0.83 |
+| **hit rate** | **0.60** | **0.90** | **0.90** |
 
-MRR 0.741. **hit@k is the number that matters** — the model needs the fact
+MRR 0.756. **hit@k is the number that matters** — the model needs the fact
 once, not every copy of it. Precision@5 is capped near 0.2–0.4 by how few
 chunks contain any given fact, so don't read 0.23 as "77% wrong".
 
@@ -276,14 +309,15 @@ chunks contain any given fact, so don't read 0.23 as "77% wrong".
 | questions phrased… | n | hit@1 | hit@3 | hit@5 |
 |---|---|---|---|---|
 | in the document's own words | 13 | 0.69 | **1.00** | 1.00 |
-| in someone else's words | 7 | 0.43 | **0.57** | 0.71 |
+| in someone else's words | 7 | 0.43 | **0.71** | 0.71 |
 
 I wrote both the documents and the questions. Where the wording matches,
-retrieval looks perfect. Where it doesn't, hit@3 falls from 1.00 to 0.57.
-The second row is the honest one, and reporting only the aggregate 0.85 would
-have hidden it. The two misses are `"bad row"` → *poison record* and
-`"the old platform"` → *Cascade* → *Halberd* — both requiring a hop that
-embedding similarity doesn't make.
+retrieval looks perfect. Where it doesn't, hit@3 falls from 1.00 to 0.71.
+The second row is the honest one, and reporting only the aggregate 0.90 would
+have hidden it. The two remaining misses are `"bad row"` → *poison record* and
+`"bounce a stuck job without seeing customer records"` → *operator* — both
+requiring a hop from a description to a term that embedding similarity
+doesn't make.
 
 ### Ablations
 
@@ -291,34 +325,36 @@ Chunk size, overlap held at size/6:
 
 | size | chunks | hit@1 | hit@3 | hit@5 | R@3 | MRR |
 |---|---|---|---|---|---|---|
-| 200 | 105 | 0.45 | 0.65 | 0.75 | 0.62 | 0.586 |
-| 300 | 71 | 0.55 | 0.80 | 0.85 | 0.72 | 0.691 |
-| **600** | **38** | 0.60 | **0.85** | 0.90 | **0.80** | **0.741** |
-| 1200 | 18 | **0.65** | 0.75 | 0.80 | 0.68 | 0.727 |
-| 2000 | 10 | 0.60 | 0.80 | **0.95** | 0.75 | 0.740 |
+| 200 | 105 | 0.45 | 0.65 | 0.75 | 0.65 | 0.593 |
+| 300 | 71 | 0.60 | 0.85 | 0.90 | 0.77 | 0.741 |
+| **600** | **38** | 0.60 | **0.90** | 0.90 | **0.83** | 0.756 |
+| 1200 | 18 | **0.65** | 0.80 | 0.85 | 0.70 | 0.744 |
+| 2000 | 10 | 0.60 | 0.85 | **1.00** | 0.78 | **0.758** |
 
-600 wins hit@3, recall@3 and MRR, and the curve is worse at both ends the way
-the theory says it should be. But 1200 wins hit@1 and 2000 wins hit@5 — those
-are one- and two-query differences on a 20-query set. The defensible reading
-is "600 is a good middle and the extremes are genuinely worse", not "600 is
-optimal".
+600 wins hit@3 and recall@3, and 200 is clearly worse. But 1200 wins hit@1,
+2000 wins hit@5, and 2000 edges MRR by 0.002 — those are one- and two-query
+differences on a 20-query set. The defensible reading is "600 is a good
+middle and 200 is genuinely worse", not "600 is optimal".
 
 Second ablation — nomic-embed-text's asymmetric `search_document:` /
 `search_query:` prefixes:
 
 | variant | hit@1 | hit@3 | hit@5 | MRR |
 |---|---|---|---|---|
-| correct (doc/query) | 0.60 | 0.85 | 0.90 | 0.741 |
-| none at all | **0.65** | **0.95** | **0.95** | **0.800** |
+| correct (doc/query) | 0.60 | 0.90 | 0.90 | 0.756 |
+| none at all | **0.65** | **0.95** | **0.95** | **0.792** |
 | same prefix both sides | 0.55 | 0.95 | 0.95 | 0.733 |
 
 I had written a paragraph in `embed.py` asserting that skipping the prefixes
 was measurably worse. Then I measured it, and no-prefix scored better on
 every metric.
 
-I did **not** change the default. That gap is 17 queries versus 19, on a
+I did **not** change the default. That gap is 18 queries versus 19, on a
 20-question set, over a corpus I wrote myself — comfortably inside the noise,
-and "the model card is wrong" needs more than two queries. The documented
+and "the model card is wrong" needs more than one query. (It was a two-query
+gap until a review corrected two gold labels, which cuts in favour of the
+"it's noise" reading: had I acted on the original result, I would now be
+defending a default chosen on evidence that had since halved.) The documented
 behaviour is the better prior when the evidence is this thin. It's logged as
 an open question in `LEARNING-STATUS.md` rather than quietly resolved in
 whichever direction happened to win one run.

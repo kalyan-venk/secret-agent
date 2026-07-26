@@ -152,6 +152,44 @@ Directories are marked with a trailing slash."""
         return f"{relative(p, _root())}:\n" + "\n".join("  " + e for e in entries)
 
 
+# A regex with a quantifier applied to a group that already contains one --
+# (a+)+, (a*)*, (\d+)* -- can backtrack exponentially. `(a+)+$` against 60
+# 'a's followed by anything that fails the match does not finish this decade.
+_NESTED_QUANTIFIER = re.compile(r"\([^()]*[+*}][^()]*\)\s*[+*{]")
+
+# Longest line handed to the regex engine. Backtracking blows up in the length
+# of the INPUT, so bounding the input bounds the damage even for a pattern the
+# check above misses.
+MAX_GREP_LINE = 1000
+
+
+def _reject_catastrophic(pattern: str) -> None:
+    """Refuse patterns that can hang the process.
+
+    Found by an external review 2026-07-25: `grep` is `default_policy="allow"`,
+    so it runs with no user prompt, and Python's `re` has no timeout and cannot
+    be interrupted from another thread. `Grep().run(pattern="(a+)+$", ...)`
+    against a 60-character line ran for over ten minutes before being killed.
+    Since the pattern is model-supplied -- and could arrive via prompt
+    injection in a file the agent just read -- that is a denial of service on
+    the agent with no approval step in front of it.
+
+    **This is mitigation, not elimination.** A heuristic on the pattern text
+    cannot catch every pathological regex. The real fix is a timeout, and
+    Python's `re` module cannot provide one; the honest options are the
+    third-party `regex` module (which has `timeout=`) or running the match in
+    a subprocess. Neither is worth a dependency here, so: reject the obvious
+    shapes, bound the input length, and write down that the guarantee is
+    partial.
+    """
+    if _NESTED_QUANTIFIER.search(pattern):
+        raise ToolError(
+            f"pattern {pattern!r} nests a quantifier inside a quantified group, "
+            "which can backtrack exponentially and hang the search. "
+            "Rewrite it without the nesting, e.g. 'a+' instead of '(a+)+'."
+        )
+
+
 class Grep(Tool):
     name = "grep"
     description = """Search file contents for a regular expression, recursively.
@@ -167,6 +205,8 @@ Returns matching lines with file paths and line numbers."""
     def run(self, pattern: str, path: str = ".", glob: str = "*", max_results: int = 100) -> str:
         root = _root()
         p = safe_resolve(path, root, must_exist=True)
+
+        _reject_catastrophic(pattern)
 
         try:
             rx = re.compile(pattern)
@@ -192,6 +232,11 @@ Returns matching lines with file paths and line numbers."""
                 continue  # binary or unreadable, skip quietly
             scanned += 1
             for n, line in enumerate(text.splitlines(), 1):
+                # bound the input, since backtracking blows up in its length.
+                # A minified JS file on one 400KB line would be pathological
+                # even for a well-behaved pattern.
+                if len(line) > MAX_GREP_LINE:
+                    line = line[:MAX_GREP_LINE]
                 if rx.search(line):
                     trimmed = line.strip()
                     if len(trimmed) > 200:

@@ -197,7 +197,7 @@ def test_write_then_read_roundtrip(project):
     ],
 )
 def test_shell_operators_are_rejected(project, cmd):
-    with pytest.raises(ToolError, match="not allowed"):
+    with pytest.raises(ToolError, match="shell syntax|not allowed|allowlist"):
         Bash().run(command=cmd)
 
 
@@ -240,9 +240,15 @@ def test_nonzero_exit_is_information_not_an_exception(project):
 
 def test_subprocess_env_does_not_carry_secrets(project, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-should-not-leak")
-    out = Bash().run(command="python3 -c print(1)")
-    # can't easily read the child's env, so assert the mechanism instead:
-    # the tool builds env= explicitly rather than inheriting
+    Bash().run(command="echo hi")
+    # can't easily read the child's env (no interpreter is allowlisted any
+    # more, deliberately), so assert the mechanism instead: the tool builds
+    # env= explicitly rather than inheriting.
+    #
+    # Worth being honest about what this buys. An external review pointed out
+    # that HOME is still forwarded, so a child that could read files could
+    # read ~/.aws/credentials regardless. Env scrubbing is not credential
+    # isolation; it just stops the obvious inheritance path.
     import inspect
     from secret_agent.tools import shell
     src = inspect.getsource(shell.Bash.run)
@@ -329,3 +335,91 @@ def test_confinement_holds_even_when_permission_says_yes(project):
         ToolCall(name="write_file", arguments={"path": "../outside/x.txt", "content": "no"})
     )
     assert not r.ok and "outside the project root" in r.content
+
+
+# --- regressions from the external review, 2026-07-25 -----------------
+# Every one of these passed as an ATTACK before the fix. See MISTAKES.md.
+
+
+@pytest.mark.parametrize("cmd", [
+    "python -c print(1)",
+    "python3 -c print(1)",
+    "pytest tests/",
+    "python3 -m http.server",
+])
+def test_no_interpreter_is_ever_allowlisted(project, cmd):
+    # C1. python was on the allowlist and it is a complete sandbox escape:
+    # python3 -c 'open("/tmp/x","w").write("OWNED")' wrote outside the root.
+    # There is no argument-level restriction that makes an interpreter safe.
+    with pytest.raises(ToolError, match="allowlist"):
+        Bash().run(command=cmd)
+
+
+@pytest.mark.parametrize("cmd", [
+    "cat /etc/passwd",
+    "head -2 /etc/hosts",
+    "cat ../outside/passwd.txt",
+    "grep -r root /etc/passwd",
+    "wc -l /etc/hosts",
+])
+def test_bash_arguments_are_path_confined(project, cmd):
+    # C2. bash never called safe_resolve, so `cat /etc/passwd` worked and the
+    # README's "approval is not authorisation to escape the root" was false.
+    with pytest.raises(ToolError, match="outside the project root"):
+        Bash().run(command=cmd)
+
+
+def test_bash_cannot_read_credential_files_either(project):
+    # H1. looks_secret guarded read_file and grep but not bash, so
+    # `cat .env` returned the secret that `read_file(".env")` refused.
+    with pytest.raises(ToolError, match="credential"):
+        Bash().run(command="cat .env")
+
+
+@pytest.mark.parametrize("cmd", [
+    "find . -name x -exec ls {} +",
+    "find . -execdir rm {} +",
+    "git --exec-path=/tmp status",
+])
+def test_flags_that_re_enable_execution_are_refused(project, cmd):
+    with pytest.raises(ToolError, match="not allowed"):
+        Bash().run(command=cmd)
+
+
+def test_a_literal_operator_inside_a_quoted_arg_is_not_blocked(project):
+    # M2. the metachar check ran on the raw string, so grepping FOR shell
+    # syntax was impossible. shell=False means a quoted `||` is inert.
+    out = Grep().run(pattern=r"\|\|", path=".")
+    assert "no matches" in out or ":" in out
+    # and through bash, where it used to raise
+    Bash().run(command='grep "a || b" notes.txt')
+
+
+def test_a_bare_operator_token_is_still_refused(project):
+    # the model wrote `ls ; rm -rf /` expecting a shell; a clear error is
+    # more useful than execve failing on a file named ";"
+    with pytest.raises(ToolError, match="shell syntax"):
+        Bash().run(command="ls ; rm -rf /")
+
+
+def test_nested_quantifier_patterns_are_refused(project):
+    # H3. grep is default_policy="allow", python's re has no timeout and
+    # cannot be interrupted. Grep(pattern="(a+)+$") on a 60-char line ran
+    # for >10 minutes. A model-supplied pattern must not be able to do that.
+    for bad in [r"(a+)+$", r"(a*)*b", r"(\d+)*x"]:
+        with pytest.raises(ToolError, match="backtrack"):
+            Grep().run(pattern=bad, path=".")
+
+
+def test_ordinary_grouped_patterns_still_work(project):
+    assert "notes.txt" in Grep().run(pattern=r"(TODO|FIXME)", path=".")
+    assert "src/main.py" in Grep().run(pattern=r"def \w+\(", path=".")
+
+
+def test_very_long_lines_are_bounded_before_the_regex(project):
+    from secret_agent.tools.fs import MAX_GREP_LINE
+    (project / "minified.js").write_text("x" * 50000 + "NEEDLE\n")
+    out = Grep().run(pattern="NEEDLE", path="minified.js")
+    # past the cap, so it is not found -- that is the deliberate trade
+    assert "no matches" in out
+    assert MAX_GREP_LINE == 1000

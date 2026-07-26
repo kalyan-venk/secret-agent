@@ -354,9 +354,21 @@ class Agent:
         parts = []
         if parsed.prose_before:
             parts.append(parsed.prose_before)
+
         # The model's own JSON, verbatim -- not render_call(). See above:
         # paraphrasing this measurably costs iterations.
-        parts.extend(c.raw for c in parsed.calls)
+        #
+        # Deduped, because when ONE span parses to an array of N calls, every
+        # ToolCall.raw is that same whole span (parsing.py sets raw to the
+        # enclosing text, not the individual element). Extending naively wrote
+        # the array into history N times -- token bloat plus N duplicate call
+        # records for the model to read. Caught in review 2026-07-25.
+        seen = set()
+        for c in parsed.calls:
+            if c.raw and c.raw not in seen:
+                seen.add(c.raw)
+                parts.append(c.raw)
+
         # parsed.prose_after is dropped. Measured free; removes the fabrication.
         return "\n".join(parts)
 

@@ -57,6 +57,52 @@ def test_approx_overcounts_rather_than_undercounts_on_json():
     assert approx(blob) > naive
 
 
+# real token counts from llama3.1:8b, measured 2026-07-25. Pinned here rather
+# than fetched, so the property is checked offline on every run.
+_MEASURED = [
+    ("code with operators", "result = (a+b)*(c-d)/(e+f) if x>y else g<h\n" * 10, 190),
+    ("file paths", "/usr/local/lib/python3.12/site-packages/pkg/mod.py\n" * 10, 130),
+    ("digits", "1234567890 9876543210 5551234567 42 3.14159\n" * 10, 220),
+    ("emoji", "\U0001f525\U0001f680\u2728\U0001f3af\U0001f4a1" * 16, 224),
+    ("cjk", "\u8fd9\u662f\u4e00\u4e2a\u6d4b\u8bd5\u6587\u6863\u7528\u6765\u68c0\u67e5\u5206\u8bcd\u5668\u7684\u884c\u4e3a\u65b9\u5f0f" * 5, 70),
+    ("json", '{"name": "read_file", "arguments": {"path": "a.py"}}' * 5, 85),
+    ("prose", "The quick brown fox jumps over the lazy dog. " * 10, 101),
+    ("markdown table", "| col | value | note |\n|---|---|---|\n| a | 1 | x |\n" * 8, 176),
+    ("tool output", "src/module_9.py:27: TODO handle this before release\n" * 10, 140),
+    ("code and prose", "def f(x):\n    # returns double\n    return x*2\n" * 10, 150),
+    ("yaml", "name: build\non:\n  push:\n    branches: [main]\n  pull_request:\n" * 8, 152),
+]
+
+
+@pytest.mark.parametrize("label,text,real", _MEASURED, ids=[m[0] for m in _MEASURED])
+def test_approx_never_undercounts_any_content_type(label, text, real):
+    """The property the previous estimator CLAIMED in a comment and did not have.
+
+    An external review found the old version undercounting code by 47%,
+    digits by 54% and emoji by 92%, while a comment directly above it said the
+    buckets were "chosen to sit BELOW every measured value so the estimate
+    errs toward overcounting". It was safe on precisely the two content types
+    it had been calibrated against.
+
+    Undercounting is the dangerous direction: it means believing there is
+    room when there isn't, and the payload silently overflows.
+
+    A claim about all inputs belongs in a test, not a comment. See MISTAKES.md
+    #15.
+    """
+    assert approx(text) >= real, (
+        f"{label}: estimated {approx(text)} but the real count is {real} -- "
+        "undercounting silently overflows the context window"
+    )
+
+
+def test_approx_does_not_overcount_absurdly():
+    """The other side of it. Erring high is safe; erring 5x high means
+    compacting constantly and paying for summarization that wasn't needed."""
+    for label, text, real in _MEASURED:
+        assert approx(text) <= real * 2.0, f"{label}: {approx(text)} vs {real}"
+
+
 def test_approx_is_close_enough_on_prose():
     prose = "The quick brown fox jumps over the lazy dog. " * 20
     naive = len(prose) // 4
