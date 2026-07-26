@@ -17,3 +17,4 @@ chroma_db/
 scratch/
 *.local.json
 .DS_Store
+.embed_cache/
