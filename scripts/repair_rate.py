@@ -13,8 +13,8 @@ model's apparent output quality. If you compare two models with a repair
 ladder in the loop and don't report the repair rate, you are partly measuring
 your parser and reporting it as a model difference.
 
-I know that failure mode specifically: on an earlier project a headline
-"a headline improvement improvement" turned out on audit to be mostly markdown-fence
+I know that failure mode specifically: on an earlier research project a
+headline improvement turned out on audit to be substantially markdown-fence
 stripping in the eval harness. This script is what would have caught it.
 
 ## The result (2026-07-25, 10 tasks each, ONE run per cell)

@@ -113,10 +113,10 @@ Every repair the parser applies is recorded on the call and counted, because
 the parser sits between the model and every measurement you could take *of*
 the model, silently improving its apparent output quality.
 
-This comes from being burned. On an earlier project a headline "a headline improvement
-improvement" turned out, on audit, to be mostly markdown-fence-stripping in
-the eval harness rather than any model improvement — the parser was doing the
-work and the model was getting the credit.
+This comes from being burned. On an earlier research project, a headline
+improvement turned out on audit to be substantially an artifact of the eval
+harness stripping markdown fences, rather than the models differing — the
+parser was doing the work and the model was getting the credit.
 
 `scripts/repair_rate.py` runs the same ten tasks through the real loop across
 several models. **This is one sampled run, not a fixed measurement** — the

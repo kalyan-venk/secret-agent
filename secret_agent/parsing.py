@@ -22,10 +22,10 @@ against the messy one is what forces the repair ladder below to exist.
 Every repair is recorded on the ToolCall and counted in STATS. That's
 deliberate and it is the most important thing in this file.
 
-I have been burned by exactly this before: on an earlier project a headline
-"a headline improvement improvement" turned out, on audit, to be mostly markdown-fence
-stripping in the eval harness rather than any model improvement. The parser
-was silently doing the work and taking none of the credit.
+I have been burned by exactly this before: on an earlier research project a
+headline improvement turned out, on audit, to be substantially markdown-fence
+stripping in the eval harness rather than a real difference between models.
+The parser was silently doing the work and taking none of the credit.
 
 So: if you ever compare two models with this runtime in the loop, print
 STATS.summary() alongside the result. A model that needed repair on 40% of
