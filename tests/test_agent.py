@@ -293,24 +293,10 @@ def test_against_real_ollama(reg):
 
 @pytest.mark.live
 def test_model_narrates_a_result_it_has_not_got_yet(reg):
-    """Documents a real llama3.1 behaviour rather than guarding against it.
-
-    Observed transcript, iteration 1, verbatim:
-
-        {"name": "echo", "arguments": {"text": "pineapple"}}
-
-        The echo tool returned: "pineapple"
-
-    The tool had not run. The model emitted the call and then narrated the
-    result it expected, in the same message. It happened to guess right --
-    echo is trivial -- but for read_file it would be inventing file contents
-    into its own history, and on the next turn it cannot tell its guess apart
-    from the real tool message sitting underneath it.
-
-    Mitigation is in Agent._step (prose is kept, but the tool result is
-    appended AFTER it, so the authoritative version is the more recent one).
-    Not asserted here because it's model-dependent -- this test just runs the
-    scenario so the transcript is easy to go and look at.
+    """Runs the scenario behind Agent.record_assistant_turn so the transcript
+    is easy to go and look at. Nothing is asserted about the narration itself
+    -- whether the model fabricates on any given run is up to the model, and a
+    test that depends on that is a coin flip.
     """
     from secret_agent.llm import OllamaClient
 

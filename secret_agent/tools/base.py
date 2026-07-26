@@ -48,8 +48,6 @@ class ToolResult:
 
 
 class Tool:
-    """Subclass this. Set name/description/Args, implement run()."""
-
     name: ClassVar[str] = ""
     description: ClassVar[str] = ""
     Args: ClassVar[type[BaseModel]]

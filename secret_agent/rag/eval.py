@@ -5,11 +5,10 @@
 
 This module is the reason the project can claim RAG rather than merely
 contain RAG. Without it, "I added retrieval" is a statement about code that
-exists, not about whether it helped -- and I have been on the wrong end of
-that distinction before. On an earlier project a headline improvement turned
-out, on audit, to be an artifact of the eval harness rather than the thing
-being measured. The fix is not to be more careful; the fix is to measure, and
-to write down what the measurement does not cover.
+exists, not about whether it helped. An earlier project of mine taught me the
+difference the expensive way, when an audit traced most of a headline gain
+back to the harness. Being more careful is not the fix. Measuring is, along
+with writing down what the measurement does not cover.
 
 ## The three metrics, and which one matters
 

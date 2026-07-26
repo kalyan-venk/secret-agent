@@ -205,10 +205,10 @@ Only these programs are permitted: """ + ", ".join(sorted(ALLOWED))
         # unambiguously DATA and is skipped. A bare token containing an
         # operator is the model writing shell and expecting a shell.
         #
-        # To be clear about what this check is for: with shell=False none of
-        # these do anything anyway, so this buys no security. It buys a usable
-        # error message. `ls ; rm -rf /` otherwise becomes execve looking for a
-        # program named ";" and the model learns nothing from the result.
+        # With shell=False none of these do anything anyway, so the check buys
+        # no security at all -- it buys a usable error message. `ls ; rm -rf /`
+        # otherwise becomes execve looking for a program named ";" and the
+        # model learns nothing from the result.
         for tok in argv:
             if any(c.isspace() for c in tok):
                 continue  # quoted -> data

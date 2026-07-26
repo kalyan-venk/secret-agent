@@ -241,7 +241,6 @@ class ContextManager:
     # -----------------------------------------------------------------
 
     def usage(self, conv: Conversation) -> tuple[int, int]:
-        """(tokens_used, budget)."""
         return self.counter.count(conv), self.cfg.history_budget
 
     def ensure_fits(self, conv: Conversation) -> bool:

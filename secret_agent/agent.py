@@ -70,7 +70,7 @@ class AgentFailure(RuntimeError):
 
 
 class AgentLoopExhausted(AgentFailure):
-    """Hit max_iterations without the model ever stopping."""
+    pass
 
 
 class ParseRetriesExhausted(AgentFailure):

@@ -19,12 +19,5 @@ scratch/
 .DS_Store
 .embed_cache/
 
-# local working notes, not for the public repo
-CLAUDE.md
-
-# Local working notes. Not for the public repo.
-PROJECT_SPEC.md
-LEARNING-STATUS.md
-
 # JetBrains
 .idea/

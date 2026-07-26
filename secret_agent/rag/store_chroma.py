@@ -7,8 +7,6 @@ understand vector search" than either one alone.
 
 ## What Chroma is actually adding
 
-Being specific, because "we use a vector DB" is not an answer:
-
   persistence      the numpy store lives and dies with the process. Chroma
                    writes a sqlite file plus its index, so a restart doesn't
                    mean re-embedding the corpus.
@@ -57,8 +55,6 @@ except ImportError:  # pragma: no cover
 
 
 class ChromaStore:
-    """Same interface as NumpyStore: add(chunks, vectors), search(vec, k)."""
-
     name = "chroma"
 
     def __init__(self, path: str | Path | None = None, collection: str = "meridian",
