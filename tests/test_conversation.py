@@ -44,14 +44,14 @@ def test_three_turn_conversation_still_carries_turn_one(tmp_path):
     # the phase 1 "done when". Not a model test -- it's a payload test. The
     # point is that turn 3's request literally contains turn 1's text.
     c = Conversation("sys")
-    c.add_user("my name is Kalyan")
+    c.add_user("my name is Ada")
     c.add_assistant("noted")
     c.add_user("I live in Chicago")
     c.add_assistant("noted")
     c.add_user("what is my name?")
 
     payload = json.dumps(c.to_wire())
-    assert "Kalyan" in payload
+    assert "Ada" in payload
     assert "Chicago" in payload
     assert len(c.to_wire()) == 6
 

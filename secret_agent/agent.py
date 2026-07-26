@@ -57,7 +57,7 @@ class AgentFailure(RuntimeError):
     Deliberately an exception rather than a returned string. Both subclasses
     below mean "this run failed", and handing back the last partial text
     instead would let a caller mistake a failure for an answer -- which is
-    exactly how a bad number ends up in a metric and then on a resume.
+    exactly how a bad number ends up in an aggregate and then in a report.
 
     The partial conversation and step list hang off the exception so a caller
     that wants to inspect or salvage can, explicitly.
