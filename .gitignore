@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# chroma writes a sqlite file + a bunch of binary index dirs
+.chroma/
+chroma_db/
+
+# phase 5 spills oversized tool results here
+.spill/
+
+# scratch
+scratch/
+*.local.json
+.DS_Store

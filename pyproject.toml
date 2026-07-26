@@ -1,0 +1,35 @@
+[project]
+name = "secret-agent"
+version = "0.1.0"
+description = "A frameworkless agent runtime built against a small local model"
+requires-python = ">=3.12"
+
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+# chroma pulls in a LOT (onnxruntime, tokenizers, grpc...). Kept out of the
+# base install on purpose so `pip install -e .` stays fast. Phase 6b only.
+vector = ["chromadb>=0.5"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+secret-agent = "secret_agent.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["secret_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# most tests are offline; the ones that hit ollama are marked and skipped by default
+markers = [
+    "live: hits a running ollama server, not run in the default suite",
+]
+addopts = "-m 'not live'"
