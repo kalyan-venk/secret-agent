@@ -35,9 +35,8 @@ already acted on the original result I would now be defending a default
 chosen on evidence that had since halved.
 
 So the prefixes stay on, because the documented behaviour is the better prior
-when the evidence is this thin. It is logged as an open question in
-LEARNING-STATUS.md rather than quietly resolved in whichever direction
-happened to score higher on one run.
+when the evidence is this thin. It is logged as an open question rather than
+quietly resolved in whichever direction happened to score higher on one run.
 
 The reason the ablation is here at all: without it I would have shipped the
 original paragraph, which asserted a measurement I had never taken.
