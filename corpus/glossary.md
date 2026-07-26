@@ -1,0 +1,41 @@
+# Glossary
+
+**Bronze / Silver / Gold** — the three storage layers. Raw, cleaned,
+aggregated. See `overview.md` for the rule about gold never reading bronze.
+
+**Break-glass** — the emergency access elevation path. 60 minutes, audited,
+requires written justification afterward. See `access-control.md`.
+
+**Batch** — a group of records Driftwood accumulates before writing. Closes
+at 50,000 records or 90 seconds, whichever comes first.
+
+**Backfill** — a re-run of ingestion over historical data. Uses a separate
+compute pool and a raised batch limit.
+
+**Event time bucket** — a 15 minute floor of a record's event timestamp, used
+as part of the dedup composite key.
+
+**Halberd** — the 2023 incident where a strictly-by-id deduplication rule
+silently dropped correction events for eleven days before anyone noticed. It
+is the reason the dedup key includes an event time bucket, and the reason
+Cascade was replaced.
+
+**Legal hold** — a flag that overrides retention entirely. Only Legal can
+apply or release it.
+
+**Partial batch** — a batch that closed on the time condition rather than the
+size condition. Tagged in Ledger. A high partial rate suggests a connector is
+polling more often than it has data for.
+
+**Poison record** — a malformed record that fails processing. Retried three
+times, then quarantined.
+
+**Preemptible pool** — compute that can be reclaimed mid-run. Cheaper, no
+latency guarantee. Where over-budget teams' non-tier1 work gets moved.
+
+**Tier1** — a pipeline designated business-critical. Exempt from budget
+enforcement, has tighter paging thresholds, and cannot be moved to a
+preemptible pool.
+
+**Ledger** — the metadata and lineage catalogue. Not to be confused with the
+`ledger` CLI, which is the client for it.

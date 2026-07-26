@@ -1,0 +1,44 @@
+# The corpus
+
+Documentation for **Meridian**, an internal data platform that does not exist.
+
+## Why it's fictional
+
+The retrieval claim this project makes is "the agent answered a question it
+could only answer from the corpus." That claim is untestable against real
+documentation, because a model that was trained on the internet may well
+already know the answer — and you cannot tell a successful retrieval apart
+from a lucky recall by looking at the output.
+
+So every fact in here is invented: service names, thresholds, ticket
+prefixes, people, retention windows, error codes. `llama3.1:8b` has never
+seen any of it. If it produces the number, it read the number.
+
+The same reasoning is why the eval questions in
+`secret_agent/rag/eval_set.py` key on specific invented values (`14 days`,
+`MER-4471`, `82%`) rather than on topics. A topic can be bluffed.
+
+## Contents
+
+| file | what's in it |
+|---|---|
+| `overview.md` | what Meridian is, the four subsystems, ownership |
+| `ingestion.md` | connectors, batch windows, the dedup rule |
+| `retention.md` | retention tiers and the legal-hold exception |
+| `access-control.md` | roles, the break-glass path, audit logging |
+| `oncall.md` | paging thresholds, the runbook, escalation |
+| `cost-model.md` | how storage and compute are billed to teams |
+| `deprecations.md` | what's being removed and when |
+| `glossary.md` | terms used across the other documents |
+
+## A caveat on the eval
+
+The corpus is small (eight documents) and I wrote both the documents and the
+questions. That is a known weakness: it is easy to unconsciously write
+questions whose wording matches the source passage, which inflates retrieval
+scores in a way that would not survive contact with real user queries.
+
+Partly mitigated by deliberately phrasing several eval questions with
+different vocabulary than the source (`eval_set.py` marks these
+`lexical_overlap="low"`), so the score can be broken out both ways. Not fully
+mitigated. Stated rather than hidden.
