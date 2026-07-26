@@ -217,10 +217,12 @@ class Agent:
             step.calls = [c.name for c in parsed.calls]
             step.repaired = any(c.repairs for c in parsed.calls)
 
-            # Keep the prose the model wrote alongside the call. It's often
-            # the reasoning ("I need to see the config first") and dropping it
-            # makes the transcript unreadable later.
-            self.conversation.add_assistant(completion.text)
+            # What goes into history when the model both talked AND called a
+            # tool? See record_assistant_turn below -- it's a real decision
+            # with a real failure mode either way.
+            self.conversation.add_assistant(
+                self.record_assistant_turn(completion, parsed)
+            )
 
             # --- execute -------------------------------------------
             # All calls from one completion are executed and ALL their results
@@ -249,6 +251,56 @@ class Agent:
         )
 
     # -----------------------------------------------------------------
+
+    def record_assistant_turn(self, completion: Completion, parsed: ParseResult) -> str:
+        """Decide what text to store in history for a turn that contained a
+        tool call. Return the string to record as the assistant message.
+
+        ## Why this is a decision and not a detail
+
+        Real transcript, iteration 1, llama3.1:8b, verbatim:
+
+            {"name": "echo", "arguments": {"text": "pineapple"}}
+
+            The echo tool returned: "pineapple"
+
+        The tool had not run yet. The model emitted the call and then narrated
+        the result it *expected*, in the same message. It guessed right here
+        because echo is trivial. For read_file it would be inventing file
+        contents into its own history -- and on the next turn it cannot tell
+        its guess apart from the real tool message underneath it.
+
+        ## What you have to work with
+
+            completion.text   the raw text, tool-call JSON and all
+            parsed.text       the prose with the JSON blocks removed
+            parsed.calls      list[ToolCall] -- .name, .arguments
+
+        ## The options, and what each one costs
+
+        1. Record `completion.text` unchanged (what it does today).
+           Faithful. Also means fabricated results live in history forever,
+           and the JSON is re-sent every turn burning context.
+
+        2. Record `parsed.text` -- prose only, JSON stripped.
+           Cheaper, keeps the reasoning. Still keeps the fabrication.
+
+        3. Record a synthesised line: "calling read_file(path=x)".
+           Clean history, no fabrication possible. Loses the reasoning, and
+           the model no longer sees its own words -- which can make it repeat
+           itself.
+
+        4. Keep prose but only up to the first tool call, on the theory that
+           anything after the call is narration of a result it doesn't have.
+           Fixes the actual bug. Sometimes cuts a real trailing thought.
+
+        There isn't a right answer. Pick one, and put the reason in the
+        comment -- the reason is the part that matters in six months.
+
+        TODO(human): implement your choice here.
+        """
+        # placeholder -- current behaviour, option 1. Replace this line.
+        return completion.text
 
     def _parse(self, completion: Completion) -> ParseResult:
         if self.cfg.tool_mode == "native" and completion.native_tool_calls:
