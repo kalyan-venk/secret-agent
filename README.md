@@ -5,8 +5,10 @@ token-budgeted context management, and retrieval — built against a small local
 model on purpose, because a small model emits messy output and messy output is
 what forces the interesting code to exist.
 
-No LangChain, no LlamaIndex. About 2,600 lines including tests. The loop
-itself is roughly twenty-five lines and you can read the whole thing in an
+No LangChain, no LlamaIndex. 4,100 lines of source, 1,700 of tests, 300 of
+measurement scripts — and a large share of the source is comment, because the
+reasoning behind a choice outlives the choice. The loop itself is 53 lines
+including its error handling, and you can read the whole thing in an
 afternoon, which is the point.
 
 ```
