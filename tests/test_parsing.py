@@ -128,3 +128,28 @@ def test_forgiving_loader_gives_up_rather_than_guessing():
     # means executing a tool based on a guess about intent
     obj, _ = loads_forgiving('{"name": read_file, "arguments" path}')
     assert obj is None
+
+
+def test_prose_is_split_around_the_calls_not_merged():
+    # the two halves mean different things: before = reasoning,
+    # after = narration of a result that doesn't exist yet
+    text = ('Let me check.\n{"name": "grep", "arguments": {"pattern": "x"}}\n'
+            'It returned three matches.')
+    res = parse_tool_calls(text, known_names=KNOWN)
+    assert res.prose_before == "Let me check."
+    assert res.prose_after == "It returned three matches."
+
+
+def test_prose_split_is_empty_when_there_are_no_calls():
+    res = parse_tool_calls("just talking", known_names=KNOWN)
+    assert res.prose_before == "" and res.prose_after == ""
+
+
+def test_prose_split_spans_from_first_call_to_last():
+    text = ('before\n{"name": "grep", "arguments": {"pattern": "a"}}\n'
+            'middle\n{"name": "grep", "arguments": {"pattern": "b"}}\nafter')
+    res = parse_tool_calls(text, known_names=KNOWN)
+    assert len(res.calls) == 2
+    assert res.prose_before == "before"
+    assert res.prose_after == "after"
+    assert "middle" not in res.prose_before and "middle" not in res.prose_after

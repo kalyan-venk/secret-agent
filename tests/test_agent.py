@@ -321,3 +321,64 @@ def test_model_narrates_a_result_it_has_not_got_yet(reg):
     except Exception:
         pytest.skip("model didn't cooperate; this test is documentation")
     assert run.conversation.transcript()
+
+
+# --- what goes into history when the model talks AND calls ------------
+
+
+def test_reasoning_before_a_call_is_kept(reg, cfg):
+    a = Agent(reg, Scripted(
+        "I need to check that first.\n" + call("echo", text="hi"), "done"), cfg)
+    run = a.run("x")
+    msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
+    assert "I need to check that first." in msg.content
+
+
+def test_narration_after_a_call_is_dropped(reg, cfg):
+    # the real llama3.1 failure: it states the result before the tool runs.
+    # keeping it puts a fabricated value in history next to the true one.
+    a = Agent(reg, Scripted(
+        call("echo", text="pineapple") + '\n\nThe echo tool returned: "kiwi"',
+        "done"), cfg)
+    run = a.run("x")
+    msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
+    assert "kiwi" not in msg.content
+    # and the real result is still there, from the tool
+    tool = [m for m in run.conversation.messages if m.role == "tool"][0]
+    assert tool.content == "pineapple"
+
+
+def test_the_models_own_json_is_kept_verbatim(reg, cfg):
+    # measured: paraphrasing the call into "[calling echo(text='hi')]" costs
+    # ~25% more model calls. It seems to need its own format back.
+    # scripts/turn_policy.py
+    a = Agent(reg, Scripted(call("echo", text="hi"), "done"), cfg)
+    run = a.run("x")
+    msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
+    assert msg.content == '{"name": "echo", "arguments": {"text": "hi"}}'
+
+
+def test_fences_are_not_carried_into_history(reg, cfg):
+    # call.raw is the extracted JSON, so the fence goes away for free
+    fenced = "```json\n" + call("echo", text="hi") + "\n```"
+    a = Agent(reg, Scripted(fenced, "done"), cfg)
+    run = a.run("x")
+    msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
+    assert "```" not in msg.content
+    assert '"echo"' in msg.content
+
+
+def test_a_final_answer_with_no_call_is_recorded_verbatim(reg, cfg):
+    a = Agent(reg, Scripted("Here is my full answer, unabridged."), cfg)
+    run = a.run("x")
+    msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
+    assert msg.content == "Here is my full answer, unabridged."
+
+
+def test_both_calls_are_recorded_for_a_parallel_turn(reg, cfg):
+    two = '[{"name": "echo", "arguments": {"text": "a"}}, ' \
+          '{"name": "echo", "arguments": {"text": "b"}}]'
+    a = Agent(reg, Scripted(two, "done"), cfg)
+    run = a.run("x")
+    msg = [m for m in run.conversation.messages if m.role == "assistant"][0]
+    assert '"a"' in msg.content and '"b"' in msg.content

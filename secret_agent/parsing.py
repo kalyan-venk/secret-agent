@@ -111,6 +111,17 @@ class ParseResult:
     # things that looked like calls but weren't usable; these get fed back
     problems: list[str] = field(default_factory=list)
 
+    # Prose split around the calls, rather than merged into one blob. These
+    # exist because the two halves mean opposite things and the agent needs
+    # to treat them differently:
+    #
+    #   prose_before  reasoning. "I'll need to look at the config first."
+    #   prose_after   narration of a result the tool has not returned yet.
+    #                 "The echo tool returned: pineapple" -- written BEFORE
+    #                 echo ran. See Agent.record_assistant_turn.
+    prose_before: str = ""
+    prose_after: str = ""
+
     def __bool__(self) -> bool:
         return bool(self.calls)
 
@@ -501,6 +512,10 @@ def parse_tool_calls(text: str, known_names: set[str] | None = None) -> ParseRes
             prev = e
         keep.append(body[prev:])
         result.text = "".join(keep).strip()
+
+        # balanced_spans walks left to right, so consumed is already ordered
+        result.prose_before = body[: consumed[0][0]].strip()
+        result.prose_after = body[consumed[-1][1]:].strip()
     else:
         result.text = text.strip()
 
