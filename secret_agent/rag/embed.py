@@ -16,17 +16,23 @@ worse", which sounded right and which I had not measured. Then I measured it
 (`python -m secret_agent.rag.eval --ablate`, 2026-07-25, 20 queries):
 
     variant                    hit@1   hit@3   hit@5    MRR
-    correct (doc/query)         0.60    0.85    0.90   0.741
-    none at all                 0.65    0.95    0.95   0.800
+    correct (doc/query)         0.60    0.90    0.90   0.756
+    none at all                 0.65    0.95    0.95   0.792
     same prefix both sides      0.55    0.95    0.95   0.733
 
 No prefix scored BETTER than the documented-correct usage on every metric.
 
 What I am NOT going to do is present that as a finding. The gap at hit@3 is
-17 queries versus 19 -- two questions, on a 20-question set, over a corpus I
-wrote myself. That is comfortably inside the noise, and "the model card is
-wrong" is a large claim to hang on two queries. Distinguishing a real effect
-from this would need a few hundred queries over documents I did not write.
+18 queries versus 19 -- ONE question, on a 20-question set, over a corpus I
+wrote myself. "The model card is wrong" is a large claim to hang on a single
+query. Distinguishing a real effect from this would need a few hundred
+queries over documents I did not write.
+
+That gap was two queries until an external review found two unsound gold
+labels and fixing them moved the baseline up. Worth noting which way that
+cuts: the correction made the case for "it's noise" *stronger*, and if I had
+already acted on the original result I would now be defending a default
+chosen on evidence that had since halved.
 
 So the prefixes stay on, because the documented behaviour is the better prior
 when the evidence is this thin. It is logged as an open question in

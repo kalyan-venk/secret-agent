@@ -119,7 +119,10 @@ QUERIES: list[EvalQuery] = [
     ),
     EvalQuery(
         "Which people can bounce a stuck job at 3am without seeing customer records?",
-        ("access-control.md",), "operator", "low",
+        # WAS the bare substring "operator", which appears 3x in the document
+        # and tagged chunks that merely mention the role as relevant. A marker
+        # has to identify the passage that ANSWERS the question, not the topic.
+        ("access-control.md",), "cannot read", "low",
         note="describes the role by its purpose, not its name",
     ),
     EvalQuery(
@@ -134,12 +137,17 @@ QUERIES: list[EvalQuery] = [
     ),
     EvalQuery(
         "What happens to a team that blows through its monthly spend?",
-        ("cost-model.md",), "preemptible", "low",
+        ("cost-model.md",), "preemptible pools for the remainder", "low",
         note="'blows through its spend' vs 'exceeding the budget'",
     ),
     EvalQuery(
         "Why did they stop using the old platform?",
-        ("deprecations.md", "glossary.md"), "Halberd", "low",
+        # WAS ("deprecations.md", "glossary.md") -- but Halberd appears in
+        # overview.md, glossary.md and ingestion.md, and NOT in deprecations.md
+        # at all. The gold label named a document that could not satisfy it.
+        # Caught in review 2026-07-25; see test_gold_marker_is_present_in_every_named_source,
+        # which now makes this class of error impossible to reintroduce.
+        ("overview.md", "glossary.md"), "Halberd", "low",
         note="requires connecting 'old platform' -> Cascade -> Halberd",
     ),
 ]

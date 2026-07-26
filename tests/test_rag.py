@@ -270,3 +270,46 @@ def test_the_agent_answers_from_the_corpus_not_from_memory():
     )
     assert "MER-4471" in run.answer
     assert run.tool_calls >= 1
+
+
+def test_gold_marker_is_present_in_every_named_source():
+    """The methodological fix from the external review, 2026-07-25.
+
+    `test_every_gold_marker_actually_exists_in_its_source_document` only
+    checks that SOME chunk satisfies the query. That passed while the
+    "why did they stop using the old platform" gold label named
+    `deprecations.md` as a source -- and "Halberd" appears nowhere in
+    `deprecations.md`. The label was satisfiable by glossary.md alone, so the
+    unsound half was invisible.
+
+    This checks each named source individually. A source that cannot contain
+    the marker is a labelling error, and it inflates `total_relevant`
+    denominators in recall while contributing nothing.
+    """
+    from pathlib import Path
+    for q in QUERIES:
+        for src in q.sources:
+            text = (Path("corpus") / src).read_text().lower()
+            assert q.marker.lower() in text, (
+                f"{q.question!r} names {src} as a gold source but "
+                f"{q.marker!r} does not appear in it"
+            )
+
+
+def test_gold_markers_are_specific_not_topic_words():
+    """A marker must identify the passage that ANSWERS the question.
+
+    The review flagged `marker="operator"` -- a bare word appearing three
+    times in access-control.md, so chunks that merely mention the role scored
+    as relevant. Cheap proxy for specificity: a marker should not match more
+    than half the chunks of its own source document.
+    """
+    chunks = load_corpus("corpus", 600, 100)
+    for q in QUERIES:
+        for src in q.sources:
+            in_src = [c for c in chunks if c.source == src]
+            matching = [c for c in in_src if q.marker.lower() in c.text.lower()]
+            assert len(matching) <= max(1, len(in_src) // 2), (
+                f"{q.marker!r} matches {len(matching)}/{len(in_src)} chunks of "
+                f"{src} -- too generic to mark an answer"
+            )

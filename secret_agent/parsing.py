@@ -399,12 +399,21 @@ def normalize_call(obj: Any) -> tuple[str | None, dict[str, Any] | None, list[st
         repairs.append("args_not_object")
         return name, None, repairs
 
-    # models love adding "title" (it's in the schema they were shown) and
-    # "$schema". Drop the ones that are never real parameters.
-    for junk in ("title", "$schema", "type", "description"):
-        if junk in args and junk not in ("type",):  # keep `type` if a tool wants it
-            pass
-    args.pop("$schema", None)
+    # Models copy schema metadata back as if it were an argument -- "title"
+    # especially, since it's in the JSON Schema they were shown.
+    #
+    # This loop used to have `pass` as its body and removed nothing at all.
+    # Only `$schema` was ever popped, by the line underneath. It went unnoticed
+    # because pydantic ignores unknown fields by default, so the junk was
+    # silently dropped one layer down and nothing visibly broke. Masking by
+    # luck, not by design -- and it would have surfaced the moment a tool
+    # turned on strict extras. Caught in review 2026-07-25.
+    #
+    # `type` and `description` are NOT dropped: a tool is entitled to have
+    # parameters with those names, and guessing wrong there would silently
+    # delete a real argument. `title` and `$schema` are never plausible.
+    for junk in ("title", "$schema"):
+        args.pop(junk, None)
 
     return name, args, repairs
 

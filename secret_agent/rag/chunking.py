@@ -27,18 +27,22 @@ rather than my taste (`--ablate`, 2026-07-25, 20 queries, overlap held at
 size/6):
 
     size  chunks   hit@1   hit@3   hit@5     R@3     MRR
-     200     105    0.45    0.65    0.75    0.62   0.586
-     300      71    0.55    0.80    0.85    0.72   0.691
-     600      38    0.60    0.85    0.90    0.80   0.741   <- configured
-    1200      18    0.65    0.75    0.80    0.68   0.727
-    2000      10    0.60    0.80    0.95    0.75   0.740
+     200     105    0.45    0.65    0.75    0.65   0.593
+     300      71    0.60    0.85    0.90    0.77   0.741
+     600      38    0.60    0.90    0.90    0.83   0.756   <- configured
+    1200      18    0.65    0.80    0.85    0.70   0.744
+    2000      10    0.60    0.85    1.00    0.78   0.758
 
-600 is best on hit@3, recall@3 and MRR. The curve has the shape the theory
+600 is best on hit@3 and recall@3. The curve has the shape the theory
 predicts -- bad at both ends, best in the middle -- which is reassuring, but
-note that 1200 wins hit@1 and 2000 wins hit@5. Those are one- and two-query
-differences on a 20-query set, so the right reading is "600 is a defensible
-middle and the ends are genuinely worse", not "600 is optimal to two decimal
-places".
+note that 1200 wins hit@1, 2000 wins hit@5, and 2000 edges MRR by 0.002.
+Those are one- and two-query differences on a 20-query set, so the right
+reading is "600 is a defensible middle and 200 is genuinely worse", not "600
+is optimal to two decimal places".
+
+(Numbers re-run 2026-07-25 after an external review found two unsound gold
+labels. The earlier table read 0.85 at size 600; fixing the labels moved it
+to 0.90 without changing which size wins.)
 
 On a corpus of long prose rather than structured documents with tables I
 would expect a different answer, and the tuning would need redoing.
