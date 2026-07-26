@@ -18,3 +18,6 @@ scratch/
 *.local.json
 .DS_Store
 .embed_cache/
+
+# local working notes, not for the public repo
+CLAUDE.md
