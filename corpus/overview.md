@@ -1,4 +1,4 @@
-# Meridian — Overview
+# Meridian: Overview
 
 Meridian is the internal data platform operated by the Platform Reliability
 group. It replaced the previous system, Cascade, which was decommissioned in
@@ -8,14 +8,14 @@ March 2024 after the Halberd incident.
 
 Meridian is not one service. It is four, and they fail independently:
 
-1. **Driftwood** — ingestion. Pulls from external connectors and lands raw
+1. **Driftwood**: ingestion. Pulls from external connectors and lands raw
    records in the bronze layer. Owned by the Ingest team, on-call rotation
    `pr-ingest`.
-2. **Kettle** — transformation. Runs the declared pipelines that promote
+2. **Kettle**: transformation. Runs the declared pipelines that promote
    bronze to silver and silver to gold. Owned by the Pipelines team.
-3. **Lantern** — the query layer. Everything user-facing reads through
+3. **Lantern**: the query layer. Everything user-facing reads through
    Lantern; nothing queries storage directly. Owned by the Serving team.
-4. **Ledger** — the metadata and lineage catalogue. Knows which dataset came
+4. **Ledger**: the metadata and lineage catalogue. Knows which dataset came
    from which pipeline run. Owned jointly by Pipelines and Serving, which has
    been a source of friction since the split in 2024.
 

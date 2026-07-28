@@ -109,7 +109,6 @@ class Embedder:
         except OSError:
             pass
 
-    # -----------------------------------------------------------------
 
     def embed(self, texts: list[str], prefix: str = DOC_PREFIX) -> np.ndarray:
         """-> (n, dim) float32, L2-normalised."""

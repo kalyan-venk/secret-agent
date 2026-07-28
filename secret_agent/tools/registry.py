@@ -47,7 +47,6 @@ class Registry:
     def prompt_block(self) -> str:
         return render_tools_for_prompt(list(self._tools.values()))
 
-    # -----------------------------------------------------------------
 
     def execute(self, call: ToolCall) -> ToolResult:
         """Run one call. Never raises for a tool-level problem.

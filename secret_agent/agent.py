@@ -159,7 +159,6 @@ class Agent:
 
         self.conversation = Conversation(sys_prompt)
 
-    # -----------------------------------------------------------------
 
     def run(self, task: str) -> AgentRun:
         self.conversation.add_user(task)
@@ -269,7 +268,6 @@ class Agent:
             steps,
         )
 
-    # -----------------------------------------------------------------
 
     def record_assistant_turn(self, completion: Completion, parsed: ParseResult) -> str:
         """Decide what text to store in history for a turn that contained a

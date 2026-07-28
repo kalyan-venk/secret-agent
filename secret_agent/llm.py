@@ -71,7 +71,6 @@ class OllamaClient:
         # firing more often than I think it is
         self.calls = 0
 
-    # ------------------------------------------------------------------
 
     def complete(self, messages, tools=None) -> Completion:
         payload: dict[str, Any] = {

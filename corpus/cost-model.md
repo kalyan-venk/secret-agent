@@ -18,11 +18,11 @@ review specifically looks for gold tables with fewer than 10 queries a month.
 
 Billed in pipeline-seconds, weighted by the compute pool:
 
-- `driftwood-live` — 1.0x
-- `driftwood-backfill` — 0.4x (cheaper, but preemptible and not latency
+- `driftwood-live`: 1.0x
+- `driftwood-backfill`: 0.4x (cheaper, but preemptible and not latency
   guaranteed)
-- `kettle-standard` — 1.0x
-- `kettle-highmem` — 3.1x
+- `kettle-standard`: 1.0x
+- `kettle-highmem`: 3.1x
 
 The `kettle-highmem` multiplier is the reason pipeline authors are asked to
 justify highmem in the RFC. A pipeline that could run on standard but was
@@ -32,7 +32,7 @@ the pipeline.
 ## Budgets and enforcement
 
 Each team gets a monthly compute budget set at the start of the quarter.
-Exceeding it does **not** stop pipelines — that was considered and rejected,
+Exceeding it does **not** stop pipelines. That was considered and rejected,
 because the failure mode of a halted production pipeline is worse than the
 cost overrun. Instead, exceeding the budget by more than 20% moves all of the
 team's non-tier1 pipelines to preemptible pools for the remainder of the

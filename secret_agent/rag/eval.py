@@ -117,9 +117,7 @@ def build(size: int, overlap: int, corpus="corpus", embedder=None,
     return chunks, store, embedder
 
 
-# ---------------------------------------------------------------------
 # printing
-# ---------------------------------------------------------------------
 
 
 def print_table(results: list[QueryResult]) -> None:
@@ -173,9 +171,7 @@ def print_misses(results: list[QueryResult]) -> None:
             print(f"      note: {r.query.note}")
 
 
-# ---------------------------------------------------------------------
 # ablations
-# ---------------------------------------------------------------------
 
 
 def ablate_chunk_size(embedder: Embedder) -> None:
@@ -245,7 +241,6 @@ def ablate_prefixes(embedder: Embedder) -> None:
               f"{a['hit@5']:>8.2f}{a['MRR']:>8.3f}")
 
 
-# ---------------------------------------------------------------------
 
 
 def main(argv=None) -> int:

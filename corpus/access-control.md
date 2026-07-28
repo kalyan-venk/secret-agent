@@ -2,16 +2,16 @@
 
 ## Roles
 
-Meridian has four roles. They are not hierarchical — `operator` is not a
+Meridian has four roles. They are not hierarchical: `operator` is not a
 superset of `analyst`.
 
-- **reader** — can query gold tables through Lantern. Default for all
+- **reader**: can query gold tables through Lantern. Default for all
   employees.
-- **analyst** — reader, plus silver tables and the ability to register
+- **analyst**: reader, plus silver tables and the ability to register
   non-production pipelines.
-- **operator** — can trigger, pause and backfill pipelines, but *cannot read
+- **operator**: can trigger, pause and backfill pipelines, but *cannot read
   the data those pipelines produce*. This separation is deliberate.
-- **owner** — full control of a specific dataset, including retention tier
+- **owner**: full control of a specific dataset, including retention tier
   changes and granting analyst access to it.
 
 The operator/reader split is the design decision people push back on most.

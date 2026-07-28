@@ -1,12 +1,12 @@
 # secret-agent
 
 An agent runtime with no framework under it. Tool-calling loop, guardrails,
-token-budgeted context management, and retrieval — built against a small local
+token-budgeted context management, and retrieval, built against a small local
 model on purpose, because a small model emits messy output and messy output is
 what forces the interesting code to exist.
 
 No LangChain, no LlamaIndex. 4,100 lines of source, 1,700 of tests, 300 of
-measurement scripts — and a large share of the source is comment, because the
+measurement scripts, and a large share of the source is comment, because the
 reasoning behind a choice outlives the choice. The loop itself is 53 lines
 including its error handling, and you can read the whole thing in an
 afternoon, which is the point.
@@ -26,7 +26,7 @@ pytest -m live -o addopts=""                    # 9 against real ollama
 
 ## On the commit history
 
-This was built as a marathon — one long push rather than an hour a night over
+This was built as a marathon, one long push rather than an hour a night over
 three weeks. So the timestamps cluster, and some phases have a dozen
 commits while others have one. That's what the work actually looked like:
 parsing took nine commits because it kept breaking in new ways, and the
@@ -54,7 +54,7 @@ Two reasons, and the second is the real one.
 **Practical:** there's no API key on this machine to hand a Python process.
 Ollama needs no key and costs nothing per token.
 
-**The actual reason:** small local models produce *bad* tool calls — fenced
+**The actual reason:** small local models produce *bad* tool calls: fenced
 JSON, single quotes, trailing commas, arguments double-encoded as a string,
 invented key names, tool names that don't exist, two calls when you asked for
 one, and my favourite, a response that emits the tool call and then narrates
@@ -68,7 +68,7 @@ rather than aspirational.
 **Caveat, since I measured it and it went against me:** on the ten-task set in
 `scripts/repair_rate.py`, `llama3.1:8b` and `llama3.2:3b` emitted clean JSON
 *every single time*. `qwen2.5-coder:7b` needed repair on 70%. The premise
-holds, but the variable turned out to be which model, not how small — see
+holds, but the variable turned out to be which model, not how small. See
 [Measuring the parser](#measuring-the-parser-not-just-writing-it).
 
 The provider sits behind a one-method interface (`complete(messages, tools)`),
@@ -94,7 +94,7 @@ Two decisions in there worth stating, because both have a wrong answer that
 looks right:
 
 **The stop condition keys off the absence of a tool call, not the presence of
-prose.** Small models narrate constantly — *"Sure, let me check that file."* —
+prose.** Small models narrate constantly (*"Sure, let me check that file."*)
 while also emitting the call. Stopping when the model produces text ends every
 run on iteration 1.
 
@@ -113,11 +113,11 @@ the model, silently improving its apparent output quality.
 
 This comes from being burned. On an earlier research project, a headline
 improvement turned out on audit to be substantially an artifact of the eval
-harness stripping markdown fences, rather than the models differing — the
+harness stripping markdown fences, rather than the models differing. The
 parser was doing the work and the model was getting the credit.
 
 `scripts/repair_rate.py` runs the same ten tasks through the real loop across
-several models. **This is one sampled run, not a fixed measurement** — the
+several models. **This is one sampled run, not a fixed measurement**. the
 completion counts come from live generation and will differ if you re-run it.
 The stable claim is the *direction*: llama emits clean JSON, the code-tuned
 model fences almost everything.
@@ -134,7 +134,7 @@ Which is not what I expected, and is the most useful thing I measured here.
 
 **Repair rate is a property of the specific model, not of model size.** Both
 llama models emitted clean JSON on every tool call at both temperatures. The
-7B *code-tuned* model wrapped 70% of its calls in ` ```json ` fences — because
+7B *code-tuned* model wrapped 70% of its calls in ` ```json ` fences, because
 that is what a model fine-tuned on code does with anything resembling code.
 
 So: benchmark llama3.1:8b against qwen2.5-coder:7b on tool-call validity with
@@ -143,13 +143,13 @@ That entire gap would be my parser, and it would look exactly like a
 capability difference.
 
 One run per cell is thin, and the 0% cells are the weaker half of the
-evidence — "0 out of 11" is consistent with a low rate, not only with zero.
-The 70% cell is the robust one: seven fenced calls out of ten is not a
+evidence: "0 out of 11" is consistent with a low rate, not only with zero.
+The 70% cell is the reliable one: seven fenced calls out of ten is not a
 sampling accident.
 
 Which also means I have to walk back my own framing above. "A small local
 model emits messy tool calls" is what I expected and it is not what these two
-llama models did — the fixture suite in `tests/fixtures/malformed.py` covers
+llama models did. The fixture suite in `tests/fixtures/malformed.py` covers
 twenty failure shapes, and on this task set llama triggered none of them. The
 repair ladder is insurance that mostly didn't get claimed. It got claimed hard
 on exactly one model, which is the argument for having it *and* for always
@@ -163,12 +163,12 @@ printing the rate.
 
 > **An external adversarial review on 2026-07-25 broke this section
 > completely.** What follows is the corrected version; the failure is written
-> up in full in `REVIEW-2026-07-25.md`, summarised in `MISTAKES.md` #12–14,
+> up in full in `REVIEW-2026-07-25.md`, summarised in `MISTAKES.md` #12-14,
 > and is more instructive than the design. Short
 > version: `python` was on the bash allowlist, so the sandbox was not a
 > sandbox, and bash never called the path-confinement function at all.
 
-Path confinement, then a permission layer, and they're independent — approval
+Path confinement, then a permission layer, and they're independent: approval
 is not authorisation to escape the project root.
 
 Every model-supplied path goes through `safe_resolve()`: canonicalise, then
@@ -178,7 +178,7 @@ since the *unresolved* path looks fine). `expanduser` is deliberately never
 called, so `~` is a literal directory name.
 
 Percent-encoded traversal is rejected too, but the honest answer to "how do
-you stop `%2e%2e%2f`" is **"by never URL-decoding anything"** — the rejection
+you stop `%2e%2e%2f`" is **"by never URL-decoding anything"**. The rejection
 is a tripwire, not the defense. What *isn't* handled: TOCTOU between resolve
 and open, and hardlinks. Both are written down in `sandbox.py` rather than
 quietly omitted.
@@ -199,7 +199,7 @@ cat .env                                             → read a credential file
 
 `shell=False` protects you from `/bin/sh`. It does not protect you from
 handing the model a **different** shell, and an interpreter is one. And bash
-never called `safe_resolve` on its arguments at all — so the "independent
+never called `safe_resolve` on its arguments at all, so the "independent
 layers" claim two paragraphs up was simply false for this tool. Approving one
 bash call escaped the root.
 
@@ -212,12 +212,12 @@ scrubbed environment, 30s timeout.
 The lesson worth keeping is not "I forgot about python". It's that **an
 allowlist is only as strong as the least constrained program on it**, and
 "is this binary safe" turns out to be about as hard as "is this binary
-dangerous" — which was the entire argument for preferring an allowlist. `find`
+dangerous", which was the entire argument for preferring an allowlist. `find`
 has `-exec`. `git` has `--exec-path`. I now maintain a blocklist *inside* the
 allowlist, which is exactly the smell I claimed to be avoiding.
 
 **This is defense in depth, not isolation, and the difference is not
-rhetorical.** Real isolation needs the OS — seatbelt, landlock, a container.
+rhetorical.** Real isolation needs the OS: seatbelt, landlock, a container.
 Env scrubbing likewise: it stops env-var inheritance, but `HOME` is still
 forwarded and `~/.aws/credentials` is a file, not a variable.
 
@@ -236,7 +236,7 @@ num_ctx   prompt_eval   system   first user   last user
 ```
 
 All three responses were HTTP 200 with no error field. Ollama doesn't drop
-from the front — it keeps the system prompt *and* the most recent message and
+from the front. It keeps the system prompt *and* the most recent message and
 silently discards the middle. 3,580 tokens became 53.
 
 The system prompt surviving is what makes it dangerous: the model still
@@ -252,12 +252,12 @@ counting before you send is the only defense. (`scripts/overflow_probe.py`.)
 | summarize | 2308 | 624 | 1684 | 8537 ms |
 
 Summarization is slower *and* saved fewer tokens. It doesn't win on
-compression — it wins on what it keeps, and only sometimes. A fact stated
+compression. It wins on what it keeps, and only sometimes. A fact stated
 early and never repeated is destroyed by truncation and *may* survive
 summarization; "may", because the summary is model output, and if it writes
 "discussed the config file" the filename is just as gone.
 
-Tool results get trimmed head-and-tail (the tail matters — the summary line
+Tool results get trimmed head-and-tail (the tail matters: the summary line
 and the last error live there) with the full output spilled to `.spill/` and
 the path named in the marker, so the model can `read_file` it back.
 
@@ -281,7 +281,7 @@ tokens, not the 4 I'd assumed from memory of an OpenAI figure.
 ## Retrieval, and whether it helped
 
 The corpus is documentation for **Meridian**, a data platform that does not
-exist. Every fact in it is invented — service names, error codes, thresholds.
+exist. Every fact in it is invented: service names, error codes, thresholds.
 
 That's not whimsy. If you index real documentation you cannot tell successful
 retrieval apart from the model already knowing the answer, and the claim "it
@@ -292,7 +292,7 @@ the internet. If the model says it, the model read it.
 
 > **Without:** *"To find out what error code Meridian returns... I would use
 > the Meridian API documentation. Let me check the documentation... According
-> to the documentation, attempting to delete a dataset that is—"*
+> to the documentation, attempting to delete a dataset that is..."*
 >
 > **With:** *"The error code is MER-4471: deletion blocked by active legal
 > hold. This error is not retryable and requires the legal hold to be released
@@ -300,7 +300,7 @@ the internet. If the model says it, the model read it.
 
 **Retrieval is a tool the agent calls, not a preprocessing step.** A
 preprocess step retrieves once, on the original wording, for every question
-including "thanks" — and when that search comes back wrong there is no second
+including "thanks", and when that search comes back wrong there is no second
 attempt. As a tool, the model decides whether to search, reformulates the
 query, and can search twice for a two-part question.
 
@@ -314,8 +314,8 @@ query, and can search twice for a two-part question.
 | recall | 0.50 | 0.83 | 0.83 |
 | **hit rate** | **0.60** | **0.90** | **0.90** |
 
-MRR 0.756. **hit@k is the number that matters** — the model needs the fact
-once, not every copy of it. Precision@5 is capped near 0.2–0.4 by how few
+MRR 0.756. **hit@k is the number that matters**: the model needs the fact
+once, not every copy of it. Precision@5 is capped near 0.2-0.4 by how few
 chunks contain any given fact, so don't read 0.23 as "77% wrong".
 
 **And the number I'd actually lead with:**
@@ -329,7 +329,7 @@ I wrote both the documents and the questions. Where the wording matches,
 retrieval looks perfect. Where it doesn't, hit@3 falls from 1.00 to 0.71.
 The second row is the honest one, and reporting only the aggregate 0.90 would
 have hidden it. The two remaining misses are `"bad row"` → *poison record* and
-`"bounce a stuck job without seeing customer records"` → *operator* — both
+`"bounce a stuck job without seeing customer records"` → *operator*, both
 requiring a hop from a description to a term that embedding similarity
 doesn't make.
 
@@ -346,11 +346,11 @@ Chunk size, overlap held at size/6:
 | 2000 | 10 | 0.60 | 0.85 | **1.00** | 0.78 | **0.758** |
 
 600 wins hit@3 and recall@3, and 200 is clearly worse. But 1200 wins hit@1,
-2000 wins hit@5, and 2000 edges MRR by 0.002 — those are one- and two-query
+2000 wins hit@5, and 2000 edges MRR by 0.002, those are one- and two-query
 differences on a 20-query set. The defensible reading is "600 is a good
 middle and 200 is genuinely worse", not "600 is optimal".
 
-Second ablation — nomic-embed-text's asymmetric `search_document:` /
+Second ablation, nomic-embed-text's asymmetric `search_document:` /
 `search_query:` prefixes:
 
 | variant | hit@1 | hit@3 | hit@5 | MRR |
@@ -364,7 +364,7 @@ was measurably worse. Then I measured it, and no-prefix scored better on
 every metric.
 
 I did **not** change the default. That gap is 18 queries versus 19, on a
-20-question set, over a corpus I wrote myself — comfortably inside the noise,
+20-question set, over a corpus I wrote myself, comfortably inside the noise,
 and "the model card is wrong" needs more than one query. (It was a two-query
 gap until a review corrected two gold labels, which cuts in favour of the
 "it's noise" reading: had I acted on the original result, I would now be
@@ -382,7 +382,7 @@ The ablation earned its place by contradicting me.
 `store_numpy.py` is fifteen lines: a normalised matrix, a dot product, an
 argsort. `store_chroma.py` is the same interface over Chroma. Both are kept.
 
-The brute-force one exists so that a vector database stops being magic —
+The brute-force one exists so that a vector database stops being magic:
 persistence, an HNSW index, metadata filters and concurrency are scaling
 concerns layered on those fifteen lines, not a different idea. At 38 chunks
 Chroma buys nothing except the metadata filter; at ten million vectors the
@@ -417,17 +417,17 @@ tests/              167 offline, 9 live
 ## Scope
 
 Stops at RAG, on purpose. No MCP server, no distributed tracing, no
-Kubernetes, no multi-agent orchestration — those are a different project. When
+Kubernetes, no multi-agent orchestration: those are a different project. When
 a phase started growing past its "done when" line I treated that as the phase
 being finished rather than needing expansion.
 
 ## Reading the docs in here
 
-- `REVIEW-2026-07-25.md` — **the full external-review audit trail.** Every
+- `REVIEW-2026-07-25.md`: **the full external-review audit trail.** Every
   finding, the command that verified it, the fix, the one finding refused and
   why, and the attacks that held. Start here if you care whether the security
   claims are real.
-- `DECISIONS.md` — choices made and, more usefully, what was rejected and why
-- `MISTAKES.md` — errors hit during the build, with the mechanism that let
+- `DECISIONS.md`: choices made and, more usefully, what was rejected and why
+- `MISTAKES.md`: errors hit during the build, with the mechanism that let
   each one survive
-- `corpus/README.md` — why the corpus is fictional and where the eval is weak
+- `corpus/README.md`: why the corpus is fictional and where the eval is weak

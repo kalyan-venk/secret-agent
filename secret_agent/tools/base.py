@@ -58,7 +58,6 @@ class Tool:
     def run(self, **kwargs) -> str:
         raise NotImplementedError
 
-    # -----------------------------------------------------------------
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
