@@ -26,7 +26,7 @@ incident duration.
    usually a source-side problem and is not yours to fix.
 2. If many, check the `driftwood-live` compute pool for saturation. A
    backfill that was not routed to `driftwood-backfill` is the usual cause.
-3. If the pool is healthy, check for a poison record — Driftwood will retry a
+3. If the pool is healthy, check for a poison record, Driftwood will retry a
    malformed record 3 times before quarantining it, and a burst of them
    stalls the batch.
 4. Quarantined records land in `driftwood.quarantine` and are kept for 14

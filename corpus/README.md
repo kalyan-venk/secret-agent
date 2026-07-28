@@ -7,7 +7,7 @@ Documentation for **Meridian**, an internal data platform that does not exist.
 The retrieval claim this project makes is "the agent answered a question it
 could only answer from the corpus." That claim is untestable against real
 documentation, because a model that was trained on the internet may well
-already know the answer — and you cannot tell a successful retrieval apart
+already know the answer, and you cannot tell a successful retrieval apart
 from a lucky recall by looking at the output.
 
 So every fact in here is invented: service names, thresholds, ticket

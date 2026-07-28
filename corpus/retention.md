@@ -24,7 +24,7 @@ team through Ledger and is visible in the dataset detail page as a red banner.
 
 Attempting to delete a dataset under legal hold fails with `MER-4471:
 deletion blocked by active legal hold`. This error is not retryable and
-escalating it to the on-call will not help — the hold has to be released by
+escalating it to the on-call will not help. The hold has to be released by
 Legal first.
 
 ## Deletion mechanics

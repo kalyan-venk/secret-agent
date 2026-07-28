@@ -1,4 +1,4 @@
-# Driftwood — Ingestion
+# Driftwood: Ingestion
 
 Driftwood is the only supported way to get data into Meridian. Direct writes
 to bronze storage are blocked at the IAM layer and will fail with

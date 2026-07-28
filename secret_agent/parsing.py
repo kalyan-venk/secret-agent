@@ -43,9 +43,7 @@ from typing import Any
 
 from .conversation import new_call_id
 
-# ---------------------------------------------------------------------------
 # instrumentation
-# ---------------------------------------------------------------------------
 
 
 class ParseStats:
@@ -84,9 +82,7 @@ class ParseStats:
 STATS = ParseStats()
 
 
-# ---------------------------------------------------------------------------
 # types
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -126,9 +122,7 @@ class ParseResult:
         return bool(self.calls)
 
 
-# ---------------------------------------------------------------------------
 # fences
-# ---------------------------------------------------------------------------
 
 _FENCE = re.compile(
     r"```[ \t]*(?:json|JSON|tool_call|python)?[ \t]*\r?\n(.*?)```",
@@ -170,9 +164,7 @@ def strip_fences(text: str) -> tuple[str, bool]:
     return out, hit
 
 
-# ---------------------------------------------------------------------------
 # finding balanced JSON inside prose
-# ---------------------------------------------------------------------------
 
 
 def balanced_spans(text: str) -> list[tuple[int, int]]:
@@ -231,9 +223,7 @@ def balanced_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
-# ---------------------------------------------------------------------------
 # the repair ladder
-# ---------------------------------------------------------------------------
 
 _TRAILING_COMMA = re.compile(r",\s*([}\]])")
 
@@ -323,9 +313,7 @@ def _close_unbalanced(s: str) -> str:
     return out + "".join(reversed(stack))
 
 
-# ---------------------------------------------------------------------------
 # normalising whatever shape came back
-# ---------------------------------------------------------------------------
 
 # The model does not reliably use the key names you asked for. Every one of
 # these turned up in a real completion at some point.
@@ -416,9 +404,7 @@ def normalize_call(obj: Any) -> tuple[str | None, dict[str, Any] | None, list[st
     return name, args, repairs
 
 
-# ---------------------------------------------------------------------------
 # the entry point
-# ---------------------------------------------------------------------------
 
 
 def _looks_deliberate(obj: Any, repairs: list[str]) -> bool:

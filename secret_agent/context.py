@@ -238,7 +238,6 @@ class ContextManager:
         self.history: list[Compaction] = []
         self.spill_dir = Path(cfg.root) / ".spill"
 
-    # -----------------------------------------------------------------
 
     def usage(self, conv: Conversation) -> tuple[int, int]:
         return self.counter.count(conv), self.cfg.history_budget
@@ -286,7 +285,6 @@ class ContextManager:
 
         return True
 
-    # -----------------------------------------------------------------
 
     def _plan_drop(self, conv: Conversation) -> tuple[list[list[Message]], list[list[Message]]]:
         """Split turns into (drop, keep).
@@ -376,7 +374,6 @@ class ContextManager:
             # a helper call timed out.
             return f"(summarization failed: {type(e).__name__}; history was dropped)"
 
-    # -----------------------------------------------------------------
 
     def trim_tool_result(self, result: ToolResult) -> ToolResult:
         """Keep a big tool result out of history without losing it.
@@ -421,7 +418,6 @@ class ContextManager:
         except OSError:
             return "(spill failed; middle of output is gone)"
 
-    # -----------------------------------------------------------------
 
     def report(self) -> str:
         if not self.history:
