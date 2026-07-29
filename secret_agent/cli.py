@@ -11,6 +11,8 @@ parsing and printing.
 from __future__ import annotations
 
 import argparse
+import atexit
+import shlex
 import sys
 
 from .agent import Agent, AgentFailure
@@ -44,11 +46,43 @@ def build_agent(args) -> Agent:
         from .rag import RAG_TOOLS
         tools += list(RAG_TOOLS)
 
+    # External MCP servers, additive and optional. A run with no --mcp builds
+    # exactly the tool set it always did. Each server is spawned rooted at
+    # SA_ROOT and its tools go into the SAME Registry with the SAME Permissions,
+    # so they route through the identical repair ladder, permission layer and
+    # sandbox confinement as native tools.
+    for label, command in _parse_mcp_args(getattr(args, "mcp", None) or []):
+        from .mcp import MCPStdioClient, make_mcp_tools
+        client = MCPStdioClient(command, cwd=str(cfg.root)).connect()
+        atexit.register(client.close)
+        tools += make_mcp_tools(client, label)
+
     perms = default_permissions(auto_approve=cfg.auto_approve)
     reg = Registry(tools, permissions=perms)
     agent = Agent(reg, OllamaClient(cfg), cfg)
     agent._perms = perms  # for /stats
     return agent
+
+
+def _parse_mcp_args(values) -> list[tuple[str, list[str]]]:
+    """Turn --mcp LABEL=CMD strings into (label, argv). Repeatable.
+
+        --mcp fs='npx -y @modelcontextprotocol/server-filesystem .'
+    """
+    out = []
+    for raw in values:
+        if "=" not in raw:
+            raise SystemExit(
+                f"--mcp expects LABEL=COMMAND, got {raw!r} "
+                "(e.g. fs='npx -y @modelcontextprotocol/server-filesystem .')"
+            )
+        label, command = raw.split("=", 1)
+        label = label.strip()
+        argv = shlex.split(command.strip())
+        if not label or not argv:
+            raise SystemExit(f"--mcp {raw!r}: both a label and a command are required")
+        out.append((label, argv))
+    return out
 
 
 def show_stats(agent) -> None:
@@ -149,6 +183,10 @@ def main(argv=None) -> int:
     ap.add_argument("--repl", action="store_true")
     ap.add_argument("--demo", action="store_true", help="retrieval on vs off")
     ap.add_argument("--rag", action="store_true", help="add the search_docs tool")
+    ap.add_argument("--mcp", action="append", metavar="LABEL=CMD",
+                    help="connect an MCP server and add its tools, e.g. "
+                         "--mcp fs='npx -y @modelcontextprotocol/server-filesystem .' "
+                         "(repeatable)")
     ap.add_argument("--model")
     ap.add_argument("--strategy", choices=["truncate", "summarize"])
     ap.add_argument("--max-iter", type=int)
@@ -161,6 +199,10 @@ def main(argv=None) -> int:
         return demo()
 
     agent = build_agent(args)
+    if getattr(args, "mcp", None):
+        print(f"[{len(agent.registry)} tools registered, "
+              f"including MCP servers: {', '.join(m.split('=', 1)[0] for m in args.mcp)}]",
+              file=sys.stderr)
     task = " ".join(args.task)
     if task and not args.repl:
         return run_once(agent, task)

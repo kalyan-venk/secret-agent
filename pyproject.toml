@@ -13,7 +13,7 @@ dependencies = [
 [project.optional-dependencies]
 # chroma pulls in a LOT (onnxruntime, tokenizers, grpc...). Kept out of the
 # base install on purpose so `pip install -e .` stays fast. Phase 6b only.
-vector = ["chromadb>=0.5"]
+vector = ["chromadb>=0.5", "qdrant-client>=1.7"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
@@ -31,5 +31,7 @@ testpaths = ["tests"]
 # most tests are offline; the ones that hit ollama are marked and skipped by default
 markers = [
     "live: hits a running ollama server, not run in the default suite",
+    "mcp: spawns a real MCP server via node/npx, not run in the default suite",
+    "qdrant: needs qdrant-client and a live Qdrant, not run in the default suite",
 ]
-addopts = "-m 'not live'"
+addopts = "-m 'not live and not mcp and not qdrant'"

@@ -48,6 +48,26 @@ _index = None
 _index_lock = threading.Lock()
 
 
+def _store_from_env():
+    """Pick the live store from SA_VECTOR_STORE (default numpy).
+
+    This is what makes Qdrant a real integration and not only an eval harness:
+    `SA_VECTOR_STORE=qdrant secret-agent --rag "..."` routes the agent's actual
+    search_docs tool through Qdrant. Unset or 'numpy' keeps the in-process store,
+    so the default install needs no Docker.
+    """
+    kind = os.environ.get("SA_VECTOR_STORE", "numpy").lower()
+    if kind == "numpy":
+        return NumpyStore()
+    if kind == "qdrant":
+        from .store_qdrant import QdrantStore
+        return QdrantStore()
+    if kind == "chroma":
+        from .store_chroma import ChromaStore
+        return ChromaStore()
+    raise ToolError(f"unknown SA_VECTOR_STORE={kind!r}; use numpy, qdrant, or chroma")
+
+
 def build_index(
     corpus_dir: str | Path | None = None,
     size: int | None = None,
@@ -70,7 +90,7 @@ def build_index(
         raise ToolError(f"no documents found in {corpus_dir}")
 
     embedder = embedder or Embedder()
-    store = store if store is not None else NumpyStore()
+    store = store if store is not None else _store_from_env()
 
     # Embed with_context(), not raw text: the heading carries topic words the
     # body assumes. Must match what eval.py does or the numbers are wrong.

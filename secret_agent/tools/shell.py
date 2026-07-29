@@ -127,49 +127,28 @@ MAX_OUTPUT = 8000
 
 
 def _looks_like_path(arg: str) -> bool:
-    """Is this argument plausibly naming a file?
+    """Thin wrapper over sandbox.looks_like_path.
 
-    Deliberately over-inclusive. A false positive means a search pattern
-    containing '/' gets resolved against the root and passes anyway (harmless).
-    A false negative means an unchecked path, which is the bug this exists to
-    fix -- so when in doubt, check it.
+    The one implementation lives in sandbox.py so bash and the MCP adapter
+    share it verbatim and cannot drift -- see MISTAKES.md #13. Kept as a local
+    name only because run() and the tests reference it.
     """
-    if not arg or arg.startswith("-"):
-        return False
-    return (
-        arg.startswith(("/", "~"))
-        or "/" in arg
-        or ".." in arg
-        or (_root() / arg).exists()
-    )
+    from ..sandbox import looks_like_path
+    return looks_like_path(arg, _root())
 
 
 def _check_paths(args: list[str], root: Path) -> None:
-    """Confine every path-shaped argument, or raise.
+    """Thin wrapper over sandbox.confine_paths -- the single confiner.
 
-    Reuses safe_resolve so bash gets exactly the same containment rule as
-    read_file -- traversal, absolute escapes, symlinks out, percent-encoding.
-    One implementation, so the two can't drift.
+    Confines every path-shaped argument, or raises. Reuses safe_resolve so
+    bash gets exactly the same containment rule as read_file (traversal,
+    absolute escapes, symlinks out, percent-encoding, credential names). One
+    implementation, so the callers can't drift.
     """
     # imported here rather than at module scope: sandbox imports from
     # tools.base, and a top-level import the other way is a cycle
-    from ..sandbox import PathEscape, looks_secret, safe_resolve
-
-    for arg in args:
-        if not _looks_like_path(arg):
-            continue
-        try:
-            resolved = safe_resolve(arg, root)
-        except PathEscape as e:
-            raise ToolError(
-                f"{arg!r} is outside the project root, so this command is refused. "
-                f"({e})"
-            ) from e
-        if looks_secret(resolved):
-            raise ToolError(
-                f"refusing to run this: {arg!r} looks like a credential file. "
-                "Same block that applies to read_file."
-            )
+    from ..sandbox import confine_paths
+    confine_paths(args, root)
 
 
 class Bash(Tool):
