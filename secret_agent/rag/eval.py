@@ -107,11 +107,27 @@ def aggregate(results: list[QueryResult]) -> dict[str, float]:
     return out
 
 
+def make_store(kind: str):
+    """The store selector. Every backend indexes the SAME vectors (below), so
+    switching this measures the store, not a different embedding path."""
+    if kind == "numpy":
+        return NumpyStore()
+    if kind == "chroma":
+        from .store_chroma import ChromaStore
+        return ChromaStore()
+    if kind == "qdrant":
+        from .store_qdrant import QdrantStore
+        return QdrantStore()
+    raise ValueError(f"unknown store {kind!r}; use numpy, chroma, or qdrant")
+
+
 def build(size: int, overlap: int, corpus="corpus", embedder=None,
-          doc_prefix=DOC_PREFIX, query_prefix=QUERY_PREFIX):
+          doc_prefix=DOC_PREFIX, query_prefix=QUERY_PREFIX, store="numpy"):
     chunks = load_corpus(corpus, size=size, overlap=overlap)
     embedder = embedder or Embedder()
-    store = NumpyStore()
+    store = make_store(store) if isinstance(store, str) else store
+    # embed with the DOC prefix, exactly as before. Feeding these same vectors
+    # into whichever store is selected is what keeps the numbers comparable.
     store.add(chunks, embedder.embed([c.with_context() for c in chunks],
                                      prefix=doc_prefix))
     return chunks, store, embedder
@@ -248,12 +264,14 @@ def main(argv=None) -> int:
     ap.add_argument("--ablate", action="store_true", help="run the ablations too")
     ap.add_argument("--size", type=int, default=600)
     ap.add_argument("--overlap", type=int, default=100)
+    ap.add_argument("--store", choices=("numpy", "chroma", "qdrant"), default="numpy",
+                    help="which vector store to serve the benchmark from")
     ap.add_argument("--per-query", action="store_true", help="rank of every query")
     args = ap.parse_args(argv)
 
     t0 = time.perf_counter()
     embedder = Embedder()
-    chunks, store, _ = build(args.size, args.overlap, embedder=embedder)
+    chunks, store, _ = build(args.size, args.overlap, embedder=embedder, store=args.store)
 
     print(f"corpus: {len(chunks)} chunks (size={args.size} overlap={args.overlap})")
     print(f"store:  {store.stats()}")

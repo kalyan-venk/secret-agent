@@ -158,3 +158,58 @@ def looks_secret(p: Path) -> bool:
         return True
     # .git/config holds remote URLs which sometimes carry tokens
     return ".git" in p.parts and p.name == "config"
+
+
+# ## The one path confiner every tool shares
+#
+# This is lifted out of tools/shell.py so that bash and any other tool that
+# takes model-supplied path arguments (the MCP adapter, for one) run the
+# SAME containment rule. MISTAKES.md #13 was a control that existed and was
+# tested hard, sitting next to a second tool that never called it -- so the
+# lesson is structural: one implementation, imported everywhere, so the two
+# cannot drift. If a new tool takes paths, it calls confine_paths and inherits
+# traversal, absolute-escape, symlink-out and credential-name refusals for free.
+
+
+def looks_like_path(arg: str, root: Path) -> bool:
+    """Is this argument plausibly naming a file?
+
+    Deliberately over-inclusive. A false positive means a search pattern
+    containing '/' gets resolved against the root and passes anyway (harmless).
+    A false negative means an unchecked path, which is the bug this exists to
+    fix -- so when in doubt, check it.
+    """
+    if not arg or arg.startswith("-"):
+        return False
+    return (
+        arg.startswith(("/", "~"))
+        or "/" in arg
+        or ".." in arg
+        or (Path(root) / arg).exists()
+    )
+
+
+def confine_paths(args, root: Path) -> None:
+    """Confine every path-shaped argument, or raise.
+
+    Reuses safe_resolve so every caller gets exactly the same containment rule
+    as read_file -- traversal, absolute escapes, symlinks out, percent-encoding.
+    One implementation, so the callers can't drift.
+    """
+    for arg in args:
+        if not isinstance(arg, str):
+            continue
+        if not looks_like_path(arg, root):
+            continue
+        try:
+            resolved = safe_resolve(arg, root)
+        except PathEscape as e:
+            raise ToolError(
+                f"{arg!r} is outside the project root, so this command is refused. "
+                f"({e})"
+            ) from e
+        if looks_secret(resolved):
+            raise ToolError(
+                f"refusing to run this: {arg!r} looks like a credential file. "
+                "Same block that applies to read_file."
+            )
