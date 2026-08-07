@@ -79,10 +79,10 @@ TASKS = [
     "Search the docs: what is the kettle-highmem cost multiplier?",
     "Find every file in corpus/ that mentions Halberd.",
     "Search the docs for the paging threshold on Lantern p99 latency.",
-    "Read the first 5 lines of corpus/glossary.md.",
+    "Read the first 5 lines of corpus/glossary.txt.",
     "Search the docs: what happens to a team that exceeds its compute budget?",
     "Search the docs for the deduplication key, then explain it in one sentence.",
-    "List what's in the corpus folder and then read corpus/retention.md lines 1-10.",
+    "List what's in the corpus folder and then read corpus/retention.txt lines 1-10.",
 ]
 
 CELLS = [
