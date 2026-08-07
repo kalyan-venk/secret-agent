@@ -535,8 +535,25 @@ def parse_native_tool_calls(raw_calls: list[dict[str, Any]]) -> ParseResult:
         fn = rc.get("function", rc)
         args = fn.get("arguments", {})
         if isinstance(args, str):
-            args = json.loads(args)
-        res.calls.append(ToolCall(name=fn.get("name", ""), arguments=args, raw=json.dumps(rc)))
+            # Native calls are meant to be structured, but Ollama occasionally
+            # double-encodes the arguments as a string, and a malformed one must
+            # not crash the loop. Same forgiving path the prompted parser uses;
+            # an unparseable string becomes a positional marker the registry resolves.
+            parsed, _ = loads_forgiving(args)
+            args = parsed if isinstance(parsed, dict) else {"__positional__": args}
+        # Use the provider's own call id when it supplied one (Groq/OpenAI
+        # do; Ollama's tool_calls dicts don't carry one). This matters
+        # because the hosted wire format pairs an assistant tool_calls[].id
+        # against the following role=tool message's tool_call_id -- if we
+        # discard the real id and hand back a locally-generated one instead,
+        # a strict provider (real OpenAI more than Groq) has no way to know
+        # the two belong together. Falls back to new_call_id() via the
+        # dataclass default when there's no "id" key, same as before.
+        call_id = rc.get("id")
+        kwargs = {"name": fn.get("name", ""), "arguments": args, "raw": json.dumps(rc)}
+        if call_id:
+            kwargs["id"] = call_id
+        res.calls.append(ToolCall(**kwargs))
     if res.calls:
         STATS.completions_with_calls += 1
         STATS.calls_found += len(res.calls)

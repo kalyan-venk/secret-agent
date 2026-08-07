@@ -19,5 +19,8 @@ scratch/
 .DS_Store
 .embed_cache/
 
+# hosted LLM provider API key -- never commit this
+.env.local
+
 # JetBrains
 .idea/

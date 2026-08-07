@@ -4,6 +4,7 @@ from secret_agent.parsing import (
     STATS,
     balanced_spans,
     loads_forgiving,
+    parse_native_tool_calls,
     parse_tool_calls,
     strip_fences,
 )
@@ -153,3 +154,22 @@ def test_prose_split_spans_from_first_call_to_last():
     assert res.prose_before == "before"
     assert res.prose_after == "after"
     assert "middle" not in res.prose_before and "middle" not in res.prose_after
+
+
+def test_native_call_with_valid_string_arguments_is_decoded():
+    res = parse_native_tool_calls(
+        [{"function": {"name": "read_file", "arguments": '{"path": "a.txt"}'}}]
+    )
+    assert len(res.calls) == 1
+    assert res.calls[0].name == "read_file"
+    assert res.calls[0].arguments == {"path": "a.txt"}
+
+
+def test_native_call_with_malformed_string_arguments_does_not_raise():
+    # A native call whose arguments string is not valid JSON must degrade to a
+    # readable call, not crash the loop with JSONDecodeError.
+    res = parse_native_tool_calls(
+        [{"function": {"name": "read_file", "arguments": "{bad"}}]
+    )
+    assert len(res.calls) == 1
+    assert res.calls[0].arguments == {"__positional__": "{bad"}
