@@ -54,67 +54,67 @@ class EvalQuery:
 QUERIES: list[EvalQuery] = [
     EvalQuery(
         "What is the default retention window for a newly registered bronze dataset?",
-        ("retention.md",), "14 days", "high",
+        ("retention.txt",), "14 days", "high",
     ),
     EvalQuery(
         "How long does break-glass access last?",
-        ("access-control.md",), "60 minutes", "high",
+        ("access-control.txt",), "60 minutes", "high",
     ),
     EvalQuery(
         "What error code is returned when deleting a dataset under legal hold?",
-        ("retention.md",), "MER-4471", "high",
+        ("retention.txt",), "MER-4471", "high",
     ),
     EvalQuery(
         "When does Driftwood close a batch?",
-        ("ingestion.md", "glossary.md"), "50,000 records", "high",
+        ("ingestion.txt", "glossary.txt"), "50,000 records", "high",
     ),
     EvalQuery(
         "What is the event time bucket size used for deduplication?",
-        ("ingestion.md", "glossary.md"), "15 minute", "high",
+        ("ingestion.txt", "glossary.txt"), "15 minute", "high",
     ),
     EvalQuery(
         "How much did page volume drop after the ten minute requirement was added?",
-        ("oncall.md",), "82%", "high",
+        ("oncall.txt",), "82%", "high",
     ),
     EvalQuery(
         "What is the compute cost multiplier for kettle-highmem?",
-        ("cost-model.md",), "3.1x", "high",
+        ("cost-model.txt",), "3.1x", "high",
     ),
     EvalQuery(
         "What is the p99 query latency threshold that triggers a page?",
-        ("oncall.md",), "2.5 seconds", "high",
+        ("oncall.txt",), "2.5 seconds", "high",
     ),
     EvalQuery(
         "What is the rate limit for push connectors?",
-        ("ingestion.md",), "20,000 records per second", "high",
+        ("ingestion.txt",), "20,000 records per second", "high",
     ),
     EvalQuery(
         "What percentage of daily volume does the clickstream pipeline account for?",
-        ("overview.md",), "38%", "high",
+        ("overview.txt",), "38%", "high",
     ),
     EvalQuery(
         "What error code fires when a gold table tries to read from bronze?",
-        ("overview.md",), "MER-2200", "high",
+        ("overview.txt",), "MER-2200", "high",
     ),
     EvalQuery(
         "How long is the grace window for restoring a deleted partition?",
-        ("retention.md",), "48", "high",
+        ("retention.txt",), "48", "high",
     ),
     EvalQuery(
         "What replaced 'ledger describe --legacy' and what changed about the output?",
-        ("deprecations.md",), "--json", "high",
+        ("deprecations.txt",), "--json", "high",
     ),
 
     # --- low lexical overlap: phrased the way someone who hadn't read the
     # docs would phrase it
     EvalQuery(
         "If I try to remove data that Legal has frozen, what comes back?",
-        ("retention.md",), "MER-4471", "low",
+        ("retention.txt",), "MER-4471", "low",
         note="says 'frozen' and 'remove', docs say 'legal hold' and 'deletion'",
     ),
     EvalQuery(
         "How quickly do emergency elevated permissions go away on their own?",
-        ("access-control.md",), "60 minutes", "low",
+        ("access-control.txt",), "60 minutes", "low",
         note="never says break-glass",
     ),
     EvalQuery(
@@ -122,32 +122,32 @@ QUERIES: list[EvalQuery] = [
         # WAS the bare substring "operator", which appears 3x in the document
         # and tagged chunks that merely mention the role as relevant. A marker
         # has to identify the passage that ANSWERS the question, not the topic.
-        ("access-control.md",), "cannot read", "low",
+        ("access-control.txt",), "cannot read", "low",
         note="describes the role by its purpose, not its name",
     ),
     EvalQuery(
         "My overnight job keeps stalling on one bad row. What does the system do with it?",
-        ("oncall.md", "glossary.md"), "quarantin", "low",
+        ("oncall.txt", "glossary.txt"), "quarantin", "low",
         note="'bad row' vs 'poison record'",
     ),
     EvalQuery(
         "Someone told me bouncing the transform workers clears a backlog. Is that right?",
-        ("oncall.md",), "restart Kettle workers", "low",
+        ("oncall.txt",), "restart Kettle workers", "low",
         note="'transform workers' vs 'Kettle'; the doc says explicitly not to",
     ),
     EvalQuery(
         "What happens to a team that blows through its monthly spend?",
-        ("cost-model.md",), "preemptible pools for the remainder", "low",
+        ("cost-model.txt",), "preemptible pools for the remainder", "low",
         note="'blows through its spend' vs 'exceeding the budget'",
     ),
     EvalQuery(
         "Why did they stop using the old platform?",
-        # WAS ("deprecations.md", "glossary.md") -- but Halberd appears in
-        # overview.md, glossary.md and ingestion.md, and NOT in deprecations.md
+        # WAS ("deprecations.txt", "glossary.txt") -- but Halberd appears in
+        # overview.txt, glossary.txt and ingestion.txt, and NOT in deprecations.txt
         # at all. The gold label named a document that could not satisfy it.
         # Caught in review 2026-07-25; see test_gold_marker_is_present_in_every_named_source,
         # which now makes this class of error impossible to reintroduce.
-        ("overview.md", "glossary.md"), "Halberd", "low",
+        ("overview.txt", "glossary.txt"), "Halberd", "low",
         note="requires connecting 'old platform' -> Cascade -> Halberd",
     ),
 ]

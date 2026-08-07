@@ -31,18 +31,60 @@ class Message:
     # tool messages carry these; everything else leaves them None
     tool_call_id: str | None = None
     name: str | None = None
+    # assistant turns that made tool calls carry this: one dict per call,
+    # {"id", "name", "arguments"}. Ollama never reads it -- see to_wire()'s
+    # ollama branch. Hosted (OpenAI-compatible) needs it to build the
+    # "tool_calls" array a following role=tool message must pair against.
+    tool_calls: list[dict[str, Any]] | None = None
     # not sent to the model -- bookkeeping for context.py
     pinned: bool = False
     created_at: float = field(default_factory=time.time)
 
-    def to_wire(self) -> dict[str, Any]:
-        """Ollama's shape. Note it does NOT want tool_call_id -- it just wants
-        role=tool with the content, and it figures out the association from
-        ordering. Anthropic wants tool_use_id. If a second client ever lands,
-        this method moves onto the client."""
-        d: dict[str, Any] = {"role": self.role, "content": self.content}
-        if self.role == "tool" and self.name:
-            d["name"] = self.name
+    def to_wire(self, provider: str = "ollama") -> dict[str, Any]:
+        """Wire shape depends on who's on the other end. A second client
+        landed (HostedClient, 2026-08-05) so this decision moved here, per
+        the comment that used to sit on this line.
+
+        Ollama: role=tool + content, no tool_call_id -- it figures out the
+        association from ordering and does NOT want the extra key. This
+        branch is byte-for-byte what to_wire() always produced; unchanged on
+        purpose, since Ollama's own tolerance for tool_call_id/tool_calls on
+        replayed history has not been verified and the existing behavior is
+        known-good.
+
+        Hosted (anything else -- "hosted", "openai", "groq", ...): OpenAI's
+        wire protocol, which Groq enforces and real OpenAI enforces harder.
+        A role=tool message MUST carry tool_call_id, and it must match an id
+        inside a "tool_calls" array on the assistant message immediately
+        before it, or the API 400s with "messages with role 'tool' must be a
+        response to a preceding message with 'tool_calls'". This is true
+        regardless of whether tool_mode is "native" or "prompted" -- the
+        pairing requirement is about the wire message shape, not about how
+        the call was originally produced.
+        """
+        if provider == "ollama":
+            d: dict[str, Any] = {"role": self.role, "content": self.content}
+            if self.role == "tool" and self.name:
+                d["name"] = self.name
+            return d
+
+        d = {"role": self.role, "content": self.content}
+        if self.role == "assistant" and self.tool_calls:
+            d["tool_calls"] = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": json.dumps(tc["arguments"]),
+                    },
+                }
+                for tc in self.tool_calls
+            ]
+        if self.role == "tool":
+            d["tool_call_id"] = self.tool_call_id
+            if self.name:
+                d["name"] = self.name
         return d
 
     def char_len(self) -> int:
@@ -82,8 +124,8 @@ class Conversation:
         self.messages.append(m)
         return m
 
-    def add_assistant(self, text: str) -> Message:
-        m = Message(role="assistant", content=text)
+    def add_assistant(self, text: str, tool_calls: list[dict[str, Any]] | None = None) -> Message:
+        m = Message(role="assistant", content=text, tool_calls=tool_calls)
         self.messages.append(m)
         return m
 
@@ -101,8 +143,8 @@ class Conversation:
                 return m.content
         return None
 
-    def to_wire(self) -> list[dict[str, Any]]:
-        return [m.to_wire() for m in self.messages]
+    def to_wire(self, provider: str = "ollama") -> list[dict[str, Any]]:
+        return [m.to_wire(provider) for m in self.messages]
 
     def last(self, role: Role | None = None) -> Message | None:
         for m in reversed(self.messages):

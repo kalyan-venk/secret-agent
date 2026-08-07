@@ -73,3 +73,74 @@ def test_transcript_truncates_long_bodies():
     c = Conversation()
     c.add_user("x" * 2000)
     assert "...[cut]" in c.transcript()
+
+
+# --- hosted wire format ------------------------------------------------
+#
+# The bug these two tests pin: Groq (and any real OpenAI-compatible
+# provider) rejects a role=tool message that doesn't carry a tool_call_id
+# matching an id inside a "tool_calls" array on the assistant message right
+# before it. The 21 pre-existing tests in test_llm.py never caught this
+# because they build messages as raw dicts by hand and never serialize a
+# real Conversation -- this is the test that closes that gap. Against the
+# pre-fix to_wire() (no provider argument, no tool_calls field ever emitted,
+# tool messages never carrying tool_call_id) this fails immediately: calling
+# to_wire(provider=...) raises TypeError, and even ignoring that, the tool
+# message it produced had no "tool_call_id" key at all.
+
+
+def test_hosted_wire_format_pairs_tool_call_id_with_assistant_tool_calls():
+    c = Conversation("sys")
+    c.add_user("what error does Meridian return under legal hold?")
+    c.add_assistant(
+        '{"name": "search_docs", "arguments": {"query": "legal hold"}}',
+        tool_calls=[
+            {"id": "call_abc123", "name": "search_docs", "arguments": {"query": "legal hold"}}
+        ],
+    )
+    c.add_tool_result("call_abc123", "search_docs", "error code LH-409, not retryable")
+
+    wire = c.to_wire(provider="hosted")
+    assistant_msg = wire[2]
+    tool_msg = wire[3]
+
+    assert assistant_msg["role"] == "assistant"
+    assert assistant_msg["tool_calls"] == [
+        {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {"name": "search_docs", "arguments": '{"query": "legal hold"}'},
+        }
+    ]
+
+    assert tool_msg["role"] == "tool"
+    assert tool_msg["tool_call_id"] == "call_abc123"
+    # the id genuinely pairs up, not just "both non-empty"
+    assert tool_msg["tool_call_id"] == assistant_msg["tool_calls"][0]["id"]
+
+
+def test_ollama_wire_format_is_unchanged_by_the_hosted_addition():
+    """Same conversation, provider="ollama" (also the default with no
+    argument at all): must be byte-for-byte what to_wire() always produced --
+    no tool_call_id, no tool_calls array. Ollama's own tolerance for those
+    extra keys has not been verified, so the safe default is to not send them.
+    """
+    c = Conversation("sys")
+    c.add_user("what error does Meridian return under legal hold?")
+    c.add_assistant(
+        '{"name": "search_docs", "arguments": {"query": "legal hold"}}',
+        tool_calls=[
+            {"id": "call_abc123", "name": "search_docs", "arguments": {"query": "legal hold"}}
+        ],
+    )
+    c.add_tool_result("call_abc123", "search_docs", "error code LH-409, not retryable")
+
+    wire_default = c.to_wire()
+    wire_explicit = c.to_wire(provider="ollama")
+    assert wire_default == wire_explicit
+
+    assistant_msg = wire_default[2]
+    tool_msg = wire_default[3]
+    assert "tool_calls" not in assistant_msg
+    assert "tool_call_id" not in tool_msg
+    assert tool_msg == {"role": "tool", "content": "error code LH-409, not retryable", "name": "search_docs"}

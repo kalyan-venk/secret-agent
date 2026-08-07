@@ -49,9 +49,9 @@ def main() -> int:
     corpus = root / "corpus"
     in_root_rel = None
     if corpus.is_dir():
-        md = sorted(p for p in corpus.glob("*.md") if p.name != "README.md")
-        if md:
-            in_root_rel = str(md[0].relative_to(root))
+        docs = sorted(p for p in corpus.glob("*.txt") if p.name != "overview-index.txt")
+        if docs:
+            in_root_rel = str(docs[0].relative_to(root))
     if in_root_rel is None:
         in_root_rel = "README.md"
 
