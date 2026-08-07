@@ -87,7 +87,7 @@ def test_corpus_readme_is_not_indexed():
     # it's a document ABOUT the corpus. Indexing it means queries retrieve
     # the meta-doc, which quietly makes the eval look worse.
     chunks = load_corpus("corpus", 600, 100)
-    assert not any(c.source == "README.md" for c in chunks)
+    assert not any(c.source == "overview-index.txt" for c in chunks)
     assert len(chunks) > 20
 
 
@@ -201,7 +201,7 @@ def test_query_and_document_prefixes_produce_different_vectors(index):
 def test_retrieval_finds_the_right_document(index):
     from secret_agent.rag.retrieve import search
     hits = search("what is the default retention window for bronze?", k=3, index=index[1:])
-    assert hits[0].chunk.source == "retention.md"
+    assert hits[0].chunk.source == "retention.txt"
     assert any("14 days" in h.chunk.text for h in hits)
 
 
@@ -248,8 +248,8 @@ def test_chroma_metadata_filter_scopes_the_search(index):
     chroma.add(chunks, numpy_store.vectors)
 
     q = emb.embed_query("how long does break-glass access last?")
-    hits = chroma.search(q, k=3, source="cost-model.md")
-    assert hits and all(h.chunk.source == "cost-model.md" for h in hits)
+    hits = chroma.search(q, k=3, source="cost-model.txt")
+    assert hits and all(h.chunk.source == "cost-model.txt" for h in hits)
 
 
 @pytest.mark.live
@@ -278,8 +278,8 @@ def test_gold_marker_is_present_in_every_named_source():
     `test_every_gold_marker_actually_exists_in_its_source_document` only
     checks that SOME chunk satisfies the query. That passed while the
     "why did they stop using the old platform" gold label named
-    `deprecations.md` as a source -- and "Halberd" appears nowhere in
-    `deprecations.md`. The label was satisfiable by glossary.md alone, so the
+    `deprecations.txt` as a source -- and "Halberd" appears nowhere in
+    `deprecations.txt`. The label was satisfiable by glossary.txt alone, so the
     unsound half was invisible.
 
     This checks each named source individually. A source that cannot contain
@@ -300,7 +300,7 @@ def test_gold_markers_are_specific_not_topic_words():
     """A marker must identify the passage that ANSWERS the question.
 
     The review flagged `marker="operator"` -- a bare word appearing three
-    times in access-control.md, so chunks that merely mention the role scored
+    times in access-control.txt, so chunks that merely mention the role scored
     as relevant. Cheap proxy for specificity: a marker should not match more
     than half the chunks of its own source document.
     """

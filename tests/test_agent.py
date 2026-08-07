@@ -31,6 +31,19 @@ class Scripted:
         return len(text) // 4
 
 
+class ScriptedHosted(Scripted):
+    """Same as Scripted, but declares WIRE_FORMAT="hosted" like the real
+    HostedClient does. Used to prove agent.py actually threads the client's
+    declared wire format through to Conversation.to_wire() -- see
+    test_hosted_tool_turn_produces_a_paired_wire_message below. A plain
+    Scripted (no WIRE_FORMAT attribute) exercises the getattr(...,
+    "ollama") fallback, which the rest of this file's tests already cover
+    implicitly since none of them broke when that fallback was added.
+    """
+
+    WIRE_FORMAT = "hosted"
+
+
 # --- tools -----------------------------------------------------------
 
 CALLS = []
@@ -108,6 +121,35 @@ def test_one_tool_then_answer(reg, cfg):
     assert run.answer == "It said hi."
     assert CALLS == [("echo", "hi")]
     assert run.iterations == 2
+
+
+def test_hosted_tool_turn_produces_a_paired_wire_message(reg, cfg):
+    """The BLOCKING 1 regression: a hosted-shaped client (WIRE_FORMAT=
+    "hosted", same as the real HostedClient/Groq) doing a tool-using run in
+    the default "prompted" tool_mode -- exactly what scripts/hosted_eval.py
+    exercises. Before the fix, agent.py always called
+    self.conversation.to_wire() with no provider argument, so every client
+    got the Ollama shape regardless of what it actually needed, and the tool
+    result message never carried tool_call_id. Groq 400s on that.
+
+    This checks the SECOND request's payload (the one built after the tool
+    call + result are already in history) has the assistant message's
+    tool_calls[].id matching the following tool message's tool_call_id --
+    the exact pairing Groq/OpenAI require.
+    """
+    client = ScriptedHosted(call("echo", text="hi"), "It said hi.")
+    a = Agent(reg, client, cfg)
+    run = a.run("use echo")
+    assert run.answer == "It said hi."
+
+    second_payload = client.payloads[1]
+    assistant_msg = next(m for m in second_payload if m["role"] == "assistant" and m.get("tool_calls"))
+    tool_msg = next(m for m in second_payload if m["role"] == "tool")
+
+    assert "tool_calls" in assistant_msg
+    call_id = assistant_msg["tool_calls"][0]["id"]
+    assert tool_msg["tool_call_id"] == call_id
+    assert assistant_msg["tool_calls"][0]["function"]["name"] == "echo"
 
 
 def test_three_chained_calls_complete_end_to_end(reg, cfg):

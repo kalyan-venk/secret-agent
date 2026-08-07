@@ -1,10 +1,10 @@
 # Glossary
 
 **Bronze / Silver / Gold**: the three storage layers. Raw, cleaned,
-aggregated. See `overview.md` for the rule about gold never reading bronze.
+aggregated. See `overview.txt` for the rule about gold never reading bronze.
 
 **Break-glass**: the emergency access elevation path. 60 minutes, audited,
-requires written justification afterward. See `access-control.md`.
+requires written justification afterward. See `access-control.txt`.
 
 **Batch**: a group of records Driftwood accumulates before writing. Closes
 at 50,000 records or 90 seconds, whichever comes first.

@@ -33,7 +33,7 @@ with writing down what the measurement does not cover.
     the model still misread the passage. That's a generation eval, and it is
     not this.
   - Anything about a corpus larger than eight documents, or one I did not
-    write myself. See corpus/README.md.
+    write myself. See corpus/overview-index.txt.
   - Multi-hop questions, mostly. Only "why did they stop using the old
     platform" needs two documents.
 """

@@ -14,6 +14,9 @@ dependencies = [
 # chroma pulls in a LOT (onnxruntime, tokenizers, grpc...). Kept out of the
 # base install on purpose so `pip install -e .` stays fast. Phase 6b only.
 vector = ["chromadb>=0.5", "qdrant-client>=1.7"]
+# only needed for LLM_PROVIDER=hosted (Groq / any OpenAI-compatible
+# endpoint). The default Ollama path never imports this.
+hosted = ["openai>=1.0"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
