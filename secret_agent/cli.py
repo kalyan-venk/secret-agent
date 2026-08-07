@@ -17,7 +17,7 @@ import sys
 
 from .agent import Agent, AgentFailure
 from .config import Config
-from .llm import LLMError, OllamaClient
+from .llm import LLMError, OllamaClient, build_llm_client
 from .parsing import STATS
 from .permissions import default_permissions
 from .tools.fs import FS_TOOLS
@@ -59,7 +59,9 @@ def build_agent(args) -> Agent:
 
     perms = default_permissions(auto_approve=cfg.auto_approve)
     reg = Registry(tools, permissions=perms)
-    agent = Agent(reg, OllamaClient(cfg), cfg)
+    # build_llm_client reads cfg.llm_provider: "ollama" (default) unless
+    # LLM_PROVIDER=hosted is set in the environment or .env.local.
+    agent = Agent(reg, build_llm_client(cfg), cfg)
     agent._perms = perms  # for /stats
     return agent
 

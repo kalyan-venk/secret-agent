@@ -31,6 +31,69 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def _strip_inline_comment(value: str) -> str:
+    """Drop a trailing `# comment` from an unquoted .env.local value.
+
+    A line like `KEY=val  # note` used to store the value as
+    `"val  # note"` -- the comment silently became part of whatever read the
+    key. Only a `#` preceded by whitespace (or right at the start) counts as
+    a comment starter; a bare `#` glued to real content (rare, but a token
+    could contain one) is left alone rather than guessed at, since a wrong
+    guess here would corrupt a real value.
+    """
+    for i, ch in enumerate(value):
+        if ch == "#" and (i == 0 or value[i - 1].isspace()):
+            return value[:i].rstrip()
+    return value
+
+
+def _load_dotenv_local(candidates: list[Path] | None = None) -> None:
+    """Populate os.environ from an optional .env.local, without overwriting
+    anything already set. A real shell export always wins over the file.
+
+    This is a convenience for the hosted provider path (API keys), not a
+    required config mechanism -- offline/Ollama use needs no env file at all.
+    Deliberately hand-rolled rather than pulling in python-dotenv for a
+    four-line KEY=value reader.
+
+    `candidates` is injectable so tests can point this at a tmp_path and get
+    a result that depends on nothing else on disk. Real callers (from_env)
+    pass nothing and get the default: the repo root (two levels above this
+    file) and the current working directory, repo root first so it works
+    regardless of where the process was launched from.
+    """
+    if candidates is None:
+        candidates = [
+            Path(__file__).resolve().parent.parent / ".env.local",
+            Path.cwd() / ".env.local",
+        ]
+    seen: set[Path] = set()
+    for p in candidates:
+        if p in seen or not p.exists():
+            continue
+        seen.add(p)
+        for line in p.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if value and value[0] in "\"'":
+                # Quoted value: take exactly what's between the matching
+                # quotes and drop everything after the closing quote --
+                # that's how `KEY="val"  # note` stops "# note" from
+                # becoming part of the value, without needing a separate
+                # comment-stripping pass to also handle the quoted case.
+                quote = value[0]
+                end = value.find(quote, 1)
+                value = value[1:end] if end != -1 else value[1:]
+            else:
+                value = _strip_inline_comment(value).strip()
+            if key:
+                os.environ.setdefault(key, value)
+
+
 # The one that bit me. `ollama show llama3.1:8b` reports "context length 131072"
 # and that number is a lie about what you actually get: the server loads the
 # model with its own num_ctx default (small) unless you pass num_ctx in
@@ -52,6 +115,22 @@ class Config:
     num_ctx: int = DEFAULT_NUM_CTX
     temperature: float = 0.1  # tool-calling wants boring, not creative
     request_timeout: float = 120.0
+
+    # --- provider selection ---
+    # "ollama" (default, local, no key) or "hosted" (any OpenAI-compatible
+    # endpoint -- Groq, Gemini's OpenAI-compat endpoint, OpenRouter, ...).
+    # See llm.py's HostedClient and build_llm_client().
+    llm_provider: str = "ollama"
+
+    # Defaults point at Groq's free tier because it's the provider this was
+    # built and tested against. Swapping to Gemini or OpenRouter is base_url
+    # + model + key, no code change -- that's the point of the abstraction.
+    hosted_base_url: str = "https://api.groq.com/openai/v1"
+    hosted_model: str = "llama-3.1-8b-instant"
+    # Read from SA_HOSTED_API_KEY if set, else GROQ_API_KEY, so the Groq
+    # default needs zero-config beyond exporting GROQ_API_KEY, while a
+    # different provider can be pointed at explicitly.
+    hosted_api_key: str = ""
 
     # Tool-call style. "prompted" = schemas go in the system prompt and we parse
     # the model's raw text ourselves. "native" = hand the schemas to Ollama's
@@ -92,6 +171,7 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
+        _load_dotenv_local()
         root = Path(os.environ.get("SA_ROOT", os.getcwd())).resolve()
         return cls(
             model=os.environ.get("SA_MODEL", cls.model),
@@ -107,6 +187,14 @@ class Config:
             root=root,
             auto_approve=_env_bool("SA_AUTO_APPROVE", False),
             verbose=_env_bool("SA_VERBOSE", False),
+            llm_provider=os.environ.get("LLM_PROVIDER", cls.llm_provider),
+            hosted_base_url=os.environ.get("SA_HOSTED_BASE_URL", cls.hosted_base_url),
+            hosted_model=os.environ.get("SA_HOSTED_MODEL", cls.hosted_model),
+            hosted_api_key=(
+                os.environ.get("SA_HOSTED_API_KEY")
+                or os.environ.get("GROQ_API_KEY")
+                or cls.hosted_api_key
+            ),
         )
 
     @property

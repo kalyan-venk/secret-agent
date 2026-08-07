@@ -25,7 +25,7 @@ from typing import Any, Callable
 from .config import Config
 from .context import ContextManager
 from .conversation import Conversation
-from .llm import Completion, LLMClient, OllamaClient
+from .llm import Completion, LLMClient, build_llm_client
 from .parsing import STATS, ParseResult, parse_native_tool_calls, parse_tool_calls
 from .prompts import DEFAULT_BASE, RETRY_NUDGE, build_system_prompt
 from .tools.base import ToolResult
@@ -144,7 +144,10 @@ class Agent:
         on_step: Callable[[Step], None] | None = None,
     ):
         self.cfg = cfg or Config.from_env()
-        self.client = client or OllamaClient(self.cfg)
+        # build_llm_client reads cfg.llm_provider: "ollama" (the dataclass
+        # default) unless LLM_PROVIDER=hosted was set. Passing an explicit
+        # client always wins, same as before this existed.
+        self.client = client or build_llm_client(self.cfg)
         self.registry = registry
         self.on_step = on_step
         self.ctx = ContextManager(self.cfg, self.client)
@@ -176,7 +179,12 @@ class Agent:
             step.compacted = self.ctx.ensure_fits(self.conversation)
 
             completion = self.client.complete(
-                self.conversation.to_wire(),
+                # WIRE_FORMAT is the client's own declaration of which wire
+                # shape it needs (see llm.py); Message.to_wire() does the
+                # actual per-provider serialization. getattr's default keeps
+                # any client that doesn't declare one (a test double, say)
+                # on the original Ollama shape.
+                self.conversation.to_wire(provider=getattr(self.client, "WIRE_FORMAT", "ollama")),
                 tools=self.registry.schemas() if self.cfg.tool_mode == "native" else None,
             )
             step.prompt_tokens = completion.usage.prompt_tokens
@@ -238,8 +246,21 @@ class Agent:
             # What goes into history when the model both talked AND called a
             # tool? See record_assistant_turn below -- it's a real decision
             # with a real failure mode either way.
+            #
+            # tool_calls carries {id, name, arguments} per call regardless of
+            # tool_mode -- prompted mode's ids are locally generated
+            # (ToolCall.id's new_call_id() default) and native mode's are the
+            # provider's real ids (see parse_native_tool_calls). Either way,
+            # these are the exact ids handed to add_tool_result() below, so
+            # whichever id ends up here is guaranteed to match. Ollama's
+            # to_wire() branch ignores this field entirely; hosted's branch
+            # is why it exists -- see conversation.py.
             self.conversation.add_assistant(
-                self.record_assistant_turn(completion, parsed)
+                self.record_assistant_turn(completion, parsed),
+                tool_calls=[
+                    {"id": c.id, "name": c.name, "arguments": c.arguments}
+                    for c in parsed.calls
+                ],
             )
 
             # --- execute -------------------------------------------
