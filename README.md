@@ -5,7 +5,7 @@ token-budgeted context management, and retrieval, built against a small local
 model on purpose, because a small model emits messy output and messy output is
 what forces the interesting code to exist.
 
-No LangChain, no LlamaIndex. 4,100 lines of source, 1,700 of tests, 300 of
+No LangChain, no LlamaIndex. 5,263 lines of source, 2,368 of tests, 637 of
 measurement scripts, and a large share of the source is comment, because the
 reasoning behind a choice outlives the choice. The loop itself is 53 lines
 including its error handling, and you can read the whole thing in an
@@ -18,8 +18,15 @@ ollama pull llama3.1:8b && ollama pull nomic-embed-text
 secret-agent --demo                            # retrieval on vs off
 secret-agent --rag "when does Driftwood close a batch?"
 python -m secret_agent.rag.eval --ablate       # the retrieval numbers
-pytest                                          # 210 offline
+pytest                                          # 251 offline
 pytest -m live -o addopts=""                    # 9 against real ollama
+pytest -m "mcp or qdrant" -o addopts=""         # 6 for the MCP + Qdrant extensions
+
+# optional: hosted provider instead of local Ollama for the chat model
+pip install -e ".[hosted]"
+export LLM_PROVIDER=hosted GROQ_API_KEY=...     # or copy .env.local.example -> .env.local
+secret-agent "when does Driftwood close a batch?"
+python scripts/hosted_eval.py                   # retrieval eval + one full agent task, hosted
 ```
 
 ---
@@ -34,16 +41,13 @@ permission layer took one because it didn't.
 
 I'd rather the history show that than tidy it into a fake commit-a-day.
 
-The `MISTAKES.md` file is committed for the same reason. Every error in it is
-one I actually hit here, including four where I wrote a confident claim into a
-docstring and the measurement later contradicted it.
-
-`REVIEW-2026-07-25.md` is committed for a stronger version of the same reason.
-When the build was finished I ran a hostile external review over it, with
-instructions that "strong work, minor nits" would count as a *failed* review.
-It found a total sandbox escape, among other things. That document is the full
-audit trail: every finding, how it was verified, what was fixed, and the one
-finding I looked at and refused.
+Two things in the source carry the same idea. Four docstrings stated a
+confident claim that a later measurement contradicted, and each is walked back
+in the file where it lives instead of quietly edited to look right (the parser
+section below has the clearest one). And when the build was finished I ran a
+hostile external review over it, with instructions that "strong work, minor
+nits" would count as a failed review. It found a total sandbox escape. The
+corrected design and the exploit that broke it are in the Guardrails section.
 
 ---
 
@@ -59,7 +63,7 @@ JSON, single quotes, trailing commas, arguments double-encoded as a string,
 invented key names, tool names that don't exist, two calls when you asked for
 one, and my favourite, a response that emits the tool call and then narrates
 the result it expects *before the tool has run*. (That last one is real and
-reproducible; the transcript is in `tests/test_agent.py`.)
+reproducible. The transcript is in `tests/test_agent.py`.)
 
 A frontier model hides most of that behind constrained decoding. Building
 against the messy one is what forces parse → validate → retry to be real
@@ -72,7 +76,73 @@ holds, but the variable turned out to be which model, not how small. See
 [Measuring the parser](#measuring-the-parser-not-just-writing-it).
 
 The provider sits behind a one-method interface (`complete(messages, tools)`),
-so swapping in the Anthropic SDK is one file, not a rewrite.
+so swapping in the Anthropic SDK is one file, not a rewrite. Same interface,
+different reason to use it: below is what swapping to a hosted provider
+actually looked like.
+
+---
+
+## A hosted provider, behind the same interface
+
+Everything above stays true by default: `LLM_PROVIDER` unset (or `ollama`)
+gets you the exact `OllamaClient` this was always built against, nothing
+changes underneath a run that doesn't ask for anything different.
+
+Set `LLM_PROVIDER=hosted` and the same `complete(messages, tools)` interface
+is served by `HostedClient` in `llm.py`, talking to any OpenAI-compatible
+`chat.completions` endpoint through the `openai` SDK. Configured by env vars,
+optionally read from a git-ignored `.env.local` (see `.env.local.example`):
+
+| var | default | purpose |
+|---|---|---|
+| `LLM_PROVIDER` | `ollama` | `ollama` or `hosted` |
+| `GROQ_API_KEY` | none | the key, if using the Groq default |
+| `SA_HOSTED_API_KEY` | none | explicit key, wins over `GROQ_API_KEY` |
+| `SA_HOSTED_BASE_URL` | `https://api.groq.com/openai/v1` | any OpenAI-compatible base URL |
+| `SA_HOSTED_MODEL` | `llama-3.1-8b-instant` | model id at that endpoint |
+
+Groq is the default because it's free with no credit card and speaks the
+OpenAI protocol. Swapping to Gemini's OpenAI-compatible endpoint or
+OpenRouter is `SA_HOSTED_BASE_URL` + `SA_HOSTED_MODEL` + a different key,
+nothing in `llm.py` changes; `.env.local.example` has both as commented-out
+examples. `build_llm_client(cfg)` is the one place that picks a provider, so
+`agent.py` and `cli.py` never name a concrete client class.
+
+`openai` is an optional extra (`pip install -e ".[hosted]"`), not a base
+dependency, so `pip install -e .` for the offline Ollama path stays exactly
+as light as before.
+
+**What moves and what doesn't.** Retrieval embeddings (`nomic-embed-text`)
+have no free hosted equivalent wired up here, so `search_docs` still calls
+local Ollama even with `LLM_PROVIDER=hosted` -- only the reasoning/tool-calling
+loop moves to the hosted model. That means the RAG hit@k/MRR numbers below
+are provider-independent by construction, not something the hosted run is
+expected to change.
+
+**Numbers**, `scripts/hosted_eval.py` (retrieval eval + one full agent task
+through the hosted provider), run for real with a GROQ_API_KEY:
+
+| | local (Ollama, `llama3.1:8b`) | hosted (Groq, `llama-3.1-8b-instant`) |
+|---|---|---|
+| RAG hit@3 / MRR / low-overlap hit@3 | 0.90 / 0.756 / 0.71 | identical -- retrieval stays on local Ollama regardless of `LLM_PROVIDER`, see note below |
+| agent task -- search the docs for Meridian's legal-hold error code | -- | done in 2 iterations, 1 tool call, 0% repair rate, 1473 prompt tokens total |
+| agent task -- answer | -- | "Meridian returns the error code `MER-4471` when trying to delete a dataset under legal hold, and this error is not retryable." |
+
+The RAG row has one value, not two, on purpose: `search_docs` calls local
+`nomic-embed-text` no matter which chat provider is configured, so there is
+no separate "hosted" retrieval number to report -- see "What moves and what
+doesn't" above.
+
+Also true and worth saying plainly: re-running `python -m secret_agent.rag.eval
+--ablate` today (the same command `scripts/hosted_eval.py` calls as its first
+step) prints hit@1 0.65 / MRR 0.767, not the 0.60 / 0.756 committed above.
+hit@3 (0.90) still matches. Corpus, eval code and gold labels are all
+unmodified since those numbers were committed, so this is drift, not a
+regression from this fix -- most likely the embed cache
+(`.embed_cache/nomic-embed-text.json`) no longer matches whatever produced
+the committed run. Flagging it here rather than touching the committed
+numbers, since editing `corpus/` or the gold labels is outside what this fix
+touches.
 
 ---
 
@@ -99,7 +169,7 @@ while also emitting the call. Stopping when the model produces text ends every
 run on iteration 1.
 
 **Running out of iterations raises rather than returning the last text.** A
-run that hit the cap failed; handing back its partial output lets a caller
+run that hit the cap failed. Handing back its partial output lets a caller
 mistake a failure for an answer, which is how a bad number ends up in a
 metric. Same reasoning for exhausted parse retries.
 
@@ -162,11 +232,10 @@ printing the rate.
 ## Guardrails
 
 > **An external adversarial review on 2026-07-25 broke this section
-> completely.** What follows is the corrected version; the failure is written
-> up in full in `REVIEW-2026-07-25.md`, summarised in `MISTAKES.md` #12-14,
-> and is more instructive than the design. Short
-> version: `python` was on the bash allowlist, so the sandbox was not a
-> sandbox, and bash never called the path-confinement function at all.
+> completely.** What follows is the corrected version, and the failure is more
+> instructive than the design. Short version: `python` was on the bash
+> allowlist, so the sandbox confined nothing, and bash never called the
+> path-confinement function at all.
 
 Path confinement, then a permission layer, and they're independent: approval
 is not authorisation to escape the project root.
@@ -254,7 +323,7 @@ counting before you send is the only defense. (`scripts/overflow_probe.py`.)
 Summarization is slower *and* saved fewer tokens. It doesn't win on
 compression. It wins on what it keeps, and only sometimes. A fact stated
 early and never repeated is destroyed by truncation and *may* survive
-summarization; "may", because the summary is model output, and if it writes
+summarization. "May", because the summary is model output, and if it writes
 "discussed the config file" the filename is just as gone.
 
 Tool results get trimmed head-and-tail (the tail matters: the summary line
@@ -377,20 +446,40 @@ The ablation earned its place by contradicting me.
 
 ---
 
-## Two vector stores
+## Three vector stores
 
 `store_numpy.py` is fifteen lines: a normalised matrix, a dot product, an
-argsort. `store_chroma.py` is the same interface over Chroma. Both are kept.
+argsort. `store_chroma.py` and `store_qdrant.py` put the same interface over
+Chroma and Qdrant. All three are kept.
 
 The brute-force one exists so that a vector database stops being magic:
 persistence, an HNSW index, metadata filters and concurrency are scaling
-concerns layered on those fifteen lines, not a different idea. At 38 chunks
-Chroma buys nothing except the metadata filter; at ten million vectors the
-ANN index is the whole game, and you pay for it by *sometimes getting the
-wrong neighbours*.
+concerns layered on those fifteen lines, not a different idea. At 38 chunks a
+real store buys nothing except the metadata filter. At ten million vectors the
+ANN index is the whole game, and you pay for it by *sometimes getting the wrong
+neighbours*.
 
-They return identical rankings and scores to four decimals, which is the test
-that the interface isn't leaking.
+The one thing the interface hides is a sign. Chroma returns a distance, Qdrant
+and numpy return a similarity, and converting is a subtraction that inverts the
+ranking with no error if you forget it. A parity test asserts all three return
+identical rankings and scores to four decimals, which is what catches that.
+
+## External tools over MCP
+
+An MCP client (`mcp/client.py`, `mcp/adapter.py`) connects to an external MCP
+server over stdio and registers each of its tools as an ordinary tool in the
+Registry. Routing them through the Registry means every guardrail the native
+tools already pass through governs the external ones with no new code in the
+loop: the same parse-and-repair ladder, the same permission check before
+execution, the same path confinement.
+
+Confinement runs before the call is forwarded. `make_mcp_tool` walks every
+string in the argument object and resolves it against the project root using
+the same over-inclusive check bash uses, so an out-of-root or credential-named
+path is refused here and the server never sees it. An MCP server can do nothing
+`read_file` could not. Tool names are namespaced `mcp__{label}__{tool}`, both
+to avoid colliding with a native `read_file` and to keep the permission key
+unambiguous. Nothing over MCP defaults to allow.
 
 ---
 
@@ -404,30 +493,28 @@ secret_agent/
   sandbox.py        path confinement
   permissions.py    allow / ask / deny
   conversation.py   message history
-  llm.py            provider interface + Ollama
+  llm.py            provider interface + Ollama + hosted (OpenAI-compatible)
   prompts.py        system prompt construction
   cli.py
   tools/            base, registry, fs, shell
-  rag/              chunking, embed, two stores, retrieve, eval
+  rag/              chunking, embed, three stores, retrieve, eval
+  mcp/              stdio client + adapter onto the Tool interface
 corpus/             fictional docs for Meridian
-scripts/            calibrate_tokens.py, overflow_probe.py
-tests/              167 offline, 9 live
+scripts/            calibrate_tokens.py, overflow_probe.py, hosted_eval.py
+tests/              251 offline, 9 live, 6 mcp/qdrant
 ```
 
 ## Scope
 
-Stops at RAG, on purpose. No MCP server, no distributed tracing, no
-Kubernetes, no multi-agent orchestration: those are a different project. When
-a phase started growing past its "done when" line I treated that as the phase
-being finished rather than needing expansion.
+Stops at RAG plus a thin MCP client, on purpose. No MCP server, no distributed
+tracing, no Kubernetes, no multi-agent orchestration: those are a different
+project. When a phase started growing past its "done when" line I treated that
+as the phase being finished rather than needing expansion.
 
 ## Reading the docs in here
 
-- `REVIEW-2026-07-25.md`: **the full external-review audit trail.** Every
-  finding, the command that verified it, the fix, the one finding refused and
-  why, and the attacks that held. Start here if you care whether the security
-  claims are real.
-- `DECISIONS.md`: choices made and, more usefully, what was rejected and why
-- `MISTAKES.md`: errors hit during the build, with the mechanism that let
-  each one survive
-- `corpus/README.md`: why the corpus is fictional and where the eval is weak
+The reasoning and the errors caught during the build live in the source
+itself, next to the code they explain. `sandbox.py` and `tools/shell.py` carry
+the security design and the escape that broke it. `context.py` carries the
+token-counting and overflow findings. `corpus/overview-index.txt` explains why
+the corpus is fictional and where the eval is weak.
