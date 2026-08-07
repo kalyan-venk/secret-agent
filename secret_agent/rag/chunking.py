@@ -87,7 +87,7 @@ class Chunk:
 
         The heading is prepended because a chunk from the middle of a
         document is frequently unusable without it -- "14 days" means nothing
-        until you know you're reading the Tiers table in retention.md. It
+        until you know you're reading the Tiers table in retention.txt. It
         also measurably helps the embedding, since the heading carries the
         topic words the body assumes.
         """
@@ -188,15 +188,15 @@ def split_document(path: Path, root: Path, size: int = 600, overlap: int = 100) 
 
 
 def load_corpus(root: str | Path, size: int = 600, overlap: int = 100,
-                glob: str = "*.md") -> list[Chunk]:
+                glob: str = "*.txt") -> list[Chunk]:
     root = Path(root).resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"corpus directory not found: {root}")
 
     chunks: list[Chunk] = []
     for f in sorted(root.rglob(glob)):
-        if f.name == "README.md":
-            # the corpus README is about the corpus, not part of it. Indexing
+        if f.name == "overview-index.txt":
+            # the corpus overview index is about the corpus, not part of it. Indexing
             # it means queries retrieve the meta-document, which is a subtle
             # way to make an eval look worse than it is.
             continue

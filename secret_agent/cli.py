@@ -174,7 +174,7 @@ def demo() -> int:
     print(run.answer.strip())
     print(f"\n[{run.summary()}]")
 
-    print("\nMER-4471 appears nowhere outside corpus/retention.md. If the second")
+    print("\nMER-4471 appears nowhere outside corpus/retention.txt. If the second")
     print("answer has it and the first doesn't, retrieval is the difference.")
     return 0
 

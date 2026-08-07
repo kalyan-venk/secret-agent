@@ -22,14 +22,14 @@ The same reasoning is why the eval questions in
 
 | file | what's in it |
 |---|---|
-| `overview.md` | what Meridian is, the four subsystems, ownership |
-| `ingestion.md` | connectors, batch windows, the dedup rule |
-| `retention.md` | retention tiers and the legal-hold exception |
-| `access-control.md` | roles, the break-glass path, audit logging |
-| `oncall.md` | paging thresholds, the runbook, escalation |
-| `cost-model.md` | how storage and compute are billed to teams |
-| `deprecations.md` | what's being removed and when |
-| `glossary.md` | terms used across the other documents |
+| `overview.txt` | what Meridian is, the four subsystems, ownership |
+| `ingestion.txt` | connectors, batch windows, the dedup rule |
+| `retention.txt` | retention tiers and the legal-hold exception |
+| `access-control.txt` | roles, the break-glass path, audit logging |
+| `oncall.txt` | paging thresholds, the runbook, escalation |
+| `cost-model.txt` | how storage and compute are billed to teams |
+| `deprecations.txt` | what's being removed and when |
+| `glossary.txt` | terms used across the other documents |
 
 ## A caveat on the eval
 
