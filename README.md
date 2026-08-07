@@ -44,10 +44,10 @@ I'd rather the history show that than tidy it into a fake commit-a-day.
 Two things in the source carry the same idea. Four docstrings stated a
 confident claim that a later measurement contradicted, and each is walked back
 in the file where it lives instead of quietly edited to look right (the parser
-section below has the clearest one). And when the build was finished I ran a
-hostile external review over it, with instructions that "strong work, minor
-nits" would count as a failed review. It found a total sandbox escape. The
-corrected design and the exploit that broke it are in the Guardrails section.
+section below has the clearest one). And when the build was finished I went
+back over the whole repo with one rule for myself: "strong work, minor nits"
+counts as a failed pass. That pass found a total sandbox escape. The corrected
+design and the exploit that broke it are in the Guardrails section.
 
 ---
 
