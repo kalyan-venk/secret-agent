@@ -16,7 +16,7 @@ jobs:
           python-version: "3.12"
 
       - name: install
-        run: pip install -e ".[dev,hosted]"
+        run: pip install -e ".[dev,hosted,server]"
 
       - name: pytest
         run: pytest
