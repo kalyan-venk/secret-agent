@@ -169,6 +169,19 @@ class Config:
 
     verbose: bool = False
 
+    # --- LLM call hardening ---
+    # 1 initial try + up to 3 retries, jittered exponential backoff, only on
+    # a rate limit / timeout / connection error / 5xx. See llm.py.
+    llm_max_attempts: int = 4
+
+    # --- per-call telemetry ---
+    # Off by default. When on, every LLM call appends one JSON line (model,
+    # latency, token counts, retry count, error if any) to call_log_path.
+    # Local only -- never sent anywhere. Relative paths resolve against
+    # `root`, same as the .spill/ convention in context.py.
+    log_calls: bool = False
+    call_log_path: Path = field(default_factory=lambda: Path("llm_calls.jsonl"))
+
     @classmethod
     def from_env(cls) -> "Config":
         _load_dotenv_local()
@@ -194,6 +207,11 @@ class Config:
                 os.environ.get("SA_HOSTED_API_KEY")
                 or os.environ.get("GROQ_API_KEY")
                 or cls.hosted_api_key
+            ),
+            llm_max_attempts=_env_int("SA_LLM_MAX_ATTEMPTS", cls.llm_max_attempts),
+            log_calls=_env_bool("SA_LOG_CALLS", False),
+            call_log_path=Path(
+                os.environ.get("SA_CALL_LOG_PATH", "llm_calls.jsonl")
             ),
         )
 

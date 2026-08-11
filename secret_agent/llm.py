@@ -14,8 +14,12 @@ That's it. Everything else in this repo talks to the model through that.
 from __future__ import annotations
 
 import json
+import random
 import sys
+import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Protocol
 
 import httpx
@@ -24,12 +28,88 @@ from .config import Config
 
 try:
     from openai import OpenAI as _OpenAI
+    from openai import APIConnectionError as _OpenAIConnectionError
+    from openai import APIStatusError as _OpenAIStatusError
 except ImportError:  # optional extra ("hosted"); base install stays lean
     _OpenAI = None
+    _OpenAIConnectionError = ()
+    _OpenAIStatusError = None
 
 
 class LLMError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, retryable: bool = False):
+        super().__init__(message)
+        # Set by the call site, not guessed here: a 429/5xx/timeout/
+        # connection error is worth another attempt, an auth error or a bad
+        # request never is -- retrying that just burns the rate limit twice
+        # for the same failure. See complete() in both clients below.
+        self.retryable = retryable
+
+
+# 1 initial try + up to 3 retries by default (Config.llm_max_attempts).
+_RETRY_BASE_DELAY = 0.5  # seconds
+_RETRY_MAX_DELAY = 8.0  # seconds
+
+
+def _retry_delay(attempt: int) -> float:
+    """Exponential backoff with full jitter.
+
+    A random point between 0 and the capped exponential ceiling, not the
+    ceiling itself -- so a batch of callers retrying the same rate-limited
+    provider at the same moment don't all wake up on the same tick and
+    hammer it again in lockstep.
+    """
+    ceiling = min(_RETRY_MAX_DELAY, _RETRY_BASE_DELAY * (2**attempt))
+    return random.uniform(0, ceiling)
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
+
+
+def _is_retryable_openai_error(e: Exception) -> bool:
+    if isinstance(e, _OpenAIConnectionError):  # covers APITimeoutError too
+        return True
+    if _OpenAIStatusError is not None and isinstance(e, _OpenAIStatusError):
+        return _is_retryable_status(getattr(e, "status_code", 0) or 0)
+    return False
+
+
+def _log_call(
+    cfg: Config,
+    model: str,
+    start: float,
+    retries: int,
+    *,
+    usage: "Usage | None" = None,
+    error: str | None = None,
+) -> None:
+    """Append one JSON line per LLM call: timestamp, model, latency, token
+    counts, retry count, error if any. Opt-in (cfg.log_calls), local file,
+    gitignored -- never sent anywhere. Best-effort: a logging failure must
+    never be the reason an agent run dies, same spirit as context.py's
+    _spill.
+    """
+    if not cfg.log_calls:
+        return
+    record = {
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "model": model,
+        "latency_ms": round((time.monotonic() - start) * 1000, 1),
+        "prompt_tokens": usage.prompt_tokens if usage else None,
+        "completion_tokens": usage.completion_tokens if usage else None,
+        "retries": retries,
+        "error": error,
+    }
+    path = cfg.call_log_path
+    if not path.is_absolute():
+        path = Path(cfg.root) / path
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
 
 
 @dataclass
@@ -99,20 +179,42 @@ class OllamaClient:
             payload["tools"] = tools
 
         self.calls += 1
+        start = time.monotonic()
+        max_attempts = max(1, self.cfg.llm_max_attempts)
+
+        for attempt in range(max_attempts):
+            try:
+                completion = self._send_once(payload)
+            except LLMError as e:
+                if e.retryable and attempt < max_attempts - 1:
+                    time.sleep(_retry_delay(attempt))
+                    continue
+                _log_call(self.cfg, payload["model"], start, attempt, error=str(e))
+                raise
+            else:
+                _log_call(self.cfg, payload["model"], start, attempt, usage=completion.usage)
+                return completion
+
+    def _send_once(self, payload: dict[str, Any]) -> Completion:
         try:
             r = self._client.post("/api/chat", json=payload)
         except httpx.ConnectError as e:
             raise LLMError(
-                f"can't reach ollama at {self.cfg.host} -- is `ollama serve` running?"
+                f"can't reach ollama at {self.cfg.host} -- is `ollama serve` running?",
+                retryable=True,
             ) from e
         except httpx.ReadTimeout as e:
             raise LLMError(
                 f"ollama timed out after {self.cfg.request_timeout}s. "
-                "8B models on CPU are slow with a big num_ctx; raise SA_TIMEOUT or drop num_ctx."
+                "8B models on CPU are slow with a big num_ctx; raise SA_TIMEOUT or drop num_ctx.",
+                retryable=True,
             ) from e
 
         if r.status_code != 200:
-            raise LLMError(f"ollama returned {r.status_code}: {r.text[:400]}")
+            raise LLMError(
+                f"ollama returned {r.status_code}: {r.text[:400]}",
+                retryable=_is_retryable_status(r.status_code),
+            )
 
         body = r.json()
         msg = body.get("message") or {}
@@ -207,6 +309,23 @@ class HostedClient:
             kwargs["tools"] = tools
 
         self.calls += 1
+        start = time.monotonic()
+        max_attempts = max(1, self.cfg.llm_max_attempts)
+
+        for attempt in range(max_attempts):
+            try:
+                completion = self._send_once(kwargs)
+            except LLMError as e:
+                if e.retryable and attempt < max_attempts - 1:
+                    time.sleep(_retry_delay(attempt))
+                    continue
+                _log_call(self.cfg, self.cfg.hosted_model, start, attempt, error=str(e))
+                raise
+            else:
+                _log_call(self.cfg, self.cfg.hosted_model, start, attempt, usage=completion.usage)
+                return completion
+
+    def _send_once(self, kwargs: dict[str, Any]) -> Completion:
         try:
             resp = self._client.chat.completions.create(**kwargs)
         except Exception as e:
@@ -215,10 +334,12 @@ class HostedClient:
             # Wrapped uniformly so every caller only ever handles LLMError,
             # same as the Ollama path -- they shouldn't need to know or
             # catch a second exception family depending on which provider
-            # is configured.
+            # is configured. Retryability is decided from the original
+            # exception's type/status before it's discarded.
             raise LLMError(
                 f"hosted provider call failed ({self.cfg.hosted_base_url}, "
-                f"model={self.cfg.hosted_model}): {e}"
+                f"model={self.cfg.hosted_model}): {e}",
+                retryable=_is_retryable_openai_error(e),
             ) from e
 
         choice = resp.choices[0]
