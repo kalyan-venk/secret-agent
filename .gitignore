@@ -22,5 +22,8 @@ scratch/
 # hosted LLM provider API key -- never commit this
 .env.local
 
+# opt-in per-call LLM telemetry (SA_LOG_CALLS=1), local only
+llm_calls.jsonl
+
 # JetBrains
 .idea/
