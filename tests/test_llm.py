@@ -722,3 +722,45 @@ def test_complete_logs_the_error_when_every_attempt_fails(tmp_path):
     assert rec["retries"] == 1  # 0-indexed: this was the 2nd (final) attempt
     assert rec["error"] is not None
     assert rec["prompt_tokens"] is None
+
+
+def test_vllm_provider_uses_local_openai_defaults_without_a_key(monkeypatch):
+    """LLM_PROVIDER=vllm rides the same HostedClient as Groq, but defaults to a
+    local vLLM server on :8000 and needs no real key (vLLM ignores it unless
+    started with --api-key; the openai client still wants a non-empty string).
+    """
+    monkeypatch.setattr(llm_module, "_OpenAI", FakeOpenAI)
+    monkeypatch.setenv("LLM_PROVIDER", "vllm")
+    cfg = Config.from_env()
+    assert cfg.llm_provider == "vllm"
+    assert cfg.hosted_base_url == "http://localhost:8000/v1"
+    assert cfg.hosted_api_key == "EMPTY"
+    client = build_llm_client(cfg)
+    assert isinstance(client, HostedClient)
+    inst = FakeOpenAI.instances[-1]
+    assert inst.base_url == "http://localhost:8000/v1"
+    assert inst.api_key == "EMPTY"
+
+
+def test_vllm_base_url_and_model_are_overridable_for_a_gpu_box(monkeypatch):
+    monkeypatch.setattr(llm_module, "_OpenAI", FakeOpenAI)
+    monkeypatch.setenv("LLM_PROVIDER", "vllm")
+    monkeypatch.setenv("SA_HOSTED_BASE_URL", "http://gpu-box:8000/v1")
+    monkeypatch.setenv("SA_HOSTED_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+    cfg = Config.from_env()
+    assert cfg.hosted_base_url == "http://gpu-box:8000/v1"
+    assert cfg.hosted_model == "Qwen/Qwen2.5-7B-Instruct"
+    client = build_llm_client(cfg)
+    assert isinstance(client, HostedClient)
+    assert FakeOpenAI.instances[-1].base_url == "http://gpu-box:8000/v1"
+
+
+def test_vllm_provider_does_not_fall_through_to_a_groq_key(monkeypatch):
+    """A GROQ_API_KEY left in the environment must not be silently sent to a
+    vLLM server; vllm keeps EMPTY unless SA_HOSTED_API_KEY is set explicitly.
+    """
+    monkeypatch.setattr(llm_module, "_OpenAI", FakeOpenAI)
+    monkeypatch.setenv("LLM_PROVIDER", "vllm")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-should-not-be-used")
+    cfg = Config.from_env()
+    assert cfg.hosted_api_key == "EMPTY"

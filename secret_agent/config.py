@@ -117,9 +117,11 @@ class Config:
     request_timeout: float = 120.0
 
     # --- provider selection ---
-    # "ollama" (default, local, no key) or "hosted" (any OpenAI-compatible
-    # endpoint -- Groq, Gemini's OpenAI-compat endpoint, OpenRouter, ...).
-    # See llm.py's HostedClient and build_llm_client().
+    # "ollama" (default, local, no key), "vllm" (a local vLLM server, the
+    # serving backend for the HTTP API under real concurrency), or "hosted"
+    # (any OpenAI-compatible endpoint -- Groq, Gemini's OpenAI-compat endpoint,
+    # OpenRouter, ...). vllm and hosted share one HostedClient; only the
+    # base_url/key defaults differ. See llm.py's build_llm_client().
     llm_provider: str = "ollama"
 
     # Defaults point at Groq's free tier because it's the provider this was
@@ -186,6 +188,23 @@ class Config:
     def from_env(cls) -> "Config":
         _load_dotenv_local()
         root = Path(os.environ.get("SA_ROOT", os.getcwd())).resolve()
+        provider = os.environ.get("LLM_PROVIDER", cls.llm_provider).strip().lower()
+        # vLLM serves an OpenAI-compatible endpoint, so it rides the same hosted
+        # path as Groq; only the defaults change. A vLLM server listens on
+        # :8000 by default and needs no key unless started with --api-key, but
+        # the openai client still wants a non-empty string, hence "EMPTY". Point
+        # the deployed API at vLLM with LLM_PROVIDER=vllm; local dev stays on
+        # Ollama, which is what the repair ladder was built against.
+        if provider == "vllm":
+            hosted_base_url = os.environ.get("SA_HOSTED_BASE_URL", "http://localhost:8000/v1")
+            hosted_api_key = os.environ.get("SA_HOSTED_API_KEY") or "EMPTY"
+        else:
+            hosted_base_url = os.environ.get("SA_HOSTED_BASE_URL", cls.hosted_base_url)
+            hosted_api_key = (
+                os.environ.get("SA_HOSTED_API_KEY")
+                or os.environ.get("GROQ_API_KEY")
+                or cls.hosted_api_key
+            )
         return cls(
             model=os.environ.get("SA_MODEL", cls.model),
             host=os.environ.get("SA_HOST", cls.host),
@@ -200,14 +219,10 @@ class Config:
             root=root,
             auto_approve=_env_bool("SA_AUTO_APPROVE", False),
             verbose=_env_bool("SA_VERBOSE", False),
-            llm_provider=os.environ.get("LLM_PROVIDER", cls.llm_provider),
-            hosted_base_url=os.environ.get("SA_HOSTED_BASE_URL", cls.hosted_base_url),
+            llm_provider=provider,
+            hosted_base_url=hosted_base_url,
             hosted_model=os.environ.get("SA_HOSTED_MODEL", cls.hosted_model),
-            hosted_api_key=(
-                os.environ.get("SA_HOSTED_API_KEY")
-                or os.environ.get("GROQ_API_KEY")
-                or cls.hosted_api_key
-            ),
+            hosted_api_key=hosted_api_key,
             llm_max_attempts=_env_int("SA_LLM_MAX_ATTEMPTS", cls.llm_max_attempts),
             log_calls=_env_bool("SA_LOG_CALLS", False),
             call_log_path=Path(
