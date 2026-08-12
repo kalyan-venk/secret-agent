@@ -250,8 +250,11 @@ def test_subprocess_env_does_not_carry_secrets(project, monkeypatch):
     # read ~/.aws/credentials regardless. Env scrubbing is not credential
     # isolation; it just stops the obvious inheritance path.
     import inspect
-    from secret_agent.tools import shell
-    src = inspect.getsource(shell.Bash.run)
+    from secret_agent.executor import core
+    # the spawn (with its explicitly-built env) moved into executor.core when
+    # command execution was split into its own service; the mechanism is the
+    # same, it just runs there now
+    src = inspect.getsource(core.run_command)
     assert "env={" in src and "PATH" in src
 
 

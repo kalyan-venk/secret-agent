@@ -25,5 +25,11 @@ scratch/
 # opt-in per-call LLM telemetry (SA_LOG_CALLS=1), local only
 llm_calls.jsonl
 
+# per-step agent trace when SA_TRACE_PATH points here (default is stderr)
+agent_trace.jsonl
+
+# executor node's scratch mount used by docker-compose
+workdir/
+
 # JetBrains
 .idea/

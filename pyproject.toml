@@ -17,7 +17,8 @@ vector = ["chromadb>=0.5", "qdrant-client>=1.7"]
 # only needed for LLM_PROVIDER=hosted (Groq / any OpenAI-compatible
 # endpoint). The default Ollama path never imports this.
 hosted = ["openai>=1.0"]
-# only needed to serve the agent over http (secret_agent/server.py)
+# needed to serve the agent over http (secret_agent/server.py) and to run the
+# out-of-process executor node (secret_agent/executor/service.py)
 server = ["fastapi>=0.110", "uvicorn>=0.29"]
 dev = ["pytest>=8.0"]
 
