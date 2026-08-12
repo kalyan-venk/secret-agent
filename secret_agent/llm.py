@@ -403,11 +403,13 @@ def build_llm_client(cfg: Config | None = None) -> LLMClient:
     provider = (cfg.llm_provider or "ollama").strip().lower()
     if provider == "ollama":
         return OllamaClient(cfg)
-    if provider in ("hosted", "groq", "openai", "openai-compatible"):
+    # vLLM serves an OpenAI-compatible endpoint, so it is the same HostedClient
+    # with vLLM's local base_url and no-auth defaults (set in Config.from_env).
+    if provider in ("hosted", "groq", "openai", "openai-compatible", "vllm"):
         return HostedClient(cfg)
     raise LLMError(
-        f"unknown LLM_PROVIDER={provider!r}. Use 'ollama' (default) or "
-        "'hosted' (any OpenAI-compatible endpoint)."
+        f"unknown LLM_PROVIDER={provider!r}. Use 'ollama' (local default), "
+        "'vllm' (a local vLLM server), or 'hosted' (any OpenAI-compatible endpoint)."
     )
 
 
