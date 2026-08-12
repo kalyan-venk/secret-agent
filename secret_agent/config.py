@@ -106,6 +106,10 @@ def _load_dotenv_local(candidates: list[Path] | None = None) -> None:
 # roughly linearly with this.
 DEFAULT_NUM_CTX = 8192
 
+# The model LLM_PROVIDER=vllm requests by default. Must equal the model
+# scripts/serve_vllm.sh serves, or vLLM's OpenAI server 404s the call.
+VLLM_DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+
 
 @dataclass
 class Config:
@@ -198,6 +202,10 @@ class Config:
         if provider == "vllm":
             hosted_base_url = os.environ.get("SA_HOSTED_BASE_URL", "http://localhost:8000/v1")
             hosted_api_key = os.environ.get("SA_HOSTED_API_KEY") or "EMPTY"
+            # Must match what scripts/serve_vllm.sh serves, or vLLM's OpenAI
+            # server 404s the request as an unknown model. Both default to this
+            # id; test_vllm_default_model_matches_serve_script pins them together.
+            hosted_model = os.environ.get("SA_HOSTED_MODEL", VLLM_DEFAULT_MODEL)
         else:
             hosted_base_url = os.environ.get("SA_HOSTED_BASE_URL", cls.hosted_base_url)
             hosted_api_key = (
@@ -205,6 +213,7 @@ class Config:
                 or os.environ.get("GROQ_API_KEY")
                 or cls.hosted_api_key
             )
+            hosted_model = os.environ.get("SA_HOSTED_MODEL", cls.hosted_model)
         return cls(
             model=os.environ.get("SA_MODEL", cls.model),
             host=os.environ.get("SA_HOST", cls.host),
@@ -221,7 +230,7 @@ class Config:
             verbose=_env_bool("SA_VERBOSE", False),
             llm_provider=provider,
             hosted_base_url=hosted_base_url,
-            hosted_model=os.environ.get("SA_HOSTED_MODEL", cls.hosted_model),
+            hosted_model=hosted_model,
             hosted_api_key=hosted_api_key,
             llm_max_attempts=_env_int("SA_LLM_MAX_ATTEMPTS", cls.llm_max_attempts),
             log_calls=_env_bool("SA_LOG_CALLS", False),

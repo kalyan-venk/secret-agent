@@ -764,3 +764,20 @@ def test_vllm_provider_does_not_fall_through_to_a_groq_key(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gsk-should-not-be-used")
     cfg = Config.from_env()
     assert cfg.hosted_api_key == "EMPTY"
+
+
+def test_vllm_default_model_matches_serve_script(monkeypatch):
+    """The model LLM_PROVIDER=vllm requests by default must equal the model
+    scripts/serve_vllm.sh serves, or vLLM's OpenAI server 404s the first call
+    as an unknown model. Pin the two together so they cannot drift.
+    """
+    import re
+    from secret_agent.config import VLLM_DEFAULT_MODEL
+    monkeypatch.setenv("LLM_PROVIDER", "vllm")
+    cfg = Config.from_env()
+    assert cfg.hosted_model == VLLM_DEFAULT_MODEL
+    repo = Path(config_module.__file__).resolve().parent.parent
+    script = (repo / "scripts" / "serve_vllm.sh").read_text()
+    m = re.search(r"SA_VLLM_MODEL:-([^}\"']+)", script)
+    assert m, "serve_vllm.sh has no SA_VLLM_MODEL default to compare against"
+    assert m.group(1).strip() == VLLM_DEFAULT_MODEL
