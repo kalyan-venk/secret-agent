@@ -178,6 +178,10 @@ def looks_like_path(arg: str, root: Path) -> bool:
     containing '/' gets resolved against the root and passes anyway (harmless).
     A false negative means an unchecked path, which is the bug this exists to
     fix -- so when in doubt, check it.
+
+    A leading '-' still means "not a bare path", but the caller must first pull
+    any path hidden inside a flag back out with embedded_paths(); a path smuggled
+    as --output=/etc/x reaches here only as its value, never as the flag token.
     """
     if not arg or arg.startswith("-"):
         return False
@@ -189,27 +193,57 @@ def looks_like_path(arg: str, root: Path) -> bool:
     )
 
 
+def embedded_paths(arg: str):
+    """Yield path-shaped values hidden inside a flag argument.
+
+    looks_like_path opts out every token starting with '-', which is right for a
+    bare flag but wrong when the flag carries a path: `sort --output=/etc/x`,
+    `grep --file=/etc/passwd`, or the short joined `sort -o/etc/x` all name a
+    file the flag never exposes to the plain check. That is a real escape (a
+    write or a read outside the root through an allowlisted program), so pull the
+    value out and let it go through the same confinement as a positional path.
+
+    Not a flag, or a flag with no value, yields nothing. The value is still run
+    through looks_like_path by the caller, so a non-path value (--color=auto)
+    resolves to nothing and is skipped.
+    """
+    if not arg.startswith("-"):
+        return
+    if "=" in arg:                       # --output=/x, -f=/x
+        value = arg.split("=", 1)[1]
+        if value:
+            yield value
+        return
+    if not arg.startswith("--") and len(arg) > 2:   # short joined: -o/etc/x
+        yield arg[2:]
+
+
 def confine_paths(args, root: Path) -> None:
     """Confine every path-shaped argument, or raise.
 
     Reuses safe_resolve so every caller gets exactly the same containment rule
     as read_file -- traversal, absolute escapes, symlinks out, percent-encoding.
     One implementation, so the callers can't drift.
+
+    Each argument contributes the token itself plus any path embedded in a flag
+    (embedded_paths), so `--output=/etc/x` is confined by its value even though
+    the token starts with '-'.
     """
     for arg in args:
         if not isinstance(arg, str):
             continue
-        if not looks_like_path(arg, root):
-            continue
-        try:
-            resolved = safe_resolve(arg, root)
-        except PathEscape as e:
-            raise ToolError(
-                f"{arg!r} is outside the project root, so this command is refused. "
-                f"({e})"
-            ) from e
-        if looks_secret(resolved):
-            raise ToolError(
-                f"refusing to run this: {arg!r} looks like a credential file. "
-                "Same block that applies to read_file."
-            )
+        for candidate in (arg, *embedded_paths(arg)):
+            if not looks_like_path(candidate, root):
+                continue
+            try:
+                resolved = safe_resolve(candidate, root)
+            except PathEscape as e:
+                raise ToolError(
+                    f"{arg!r} is outside the project root, so this command is "
+                    f"refused. ({e})"
+                ) from e
+            if looks_secret(resolved):
+                raise ToolError(
+                    f"refusing to run this: {arg!r} looks like a credential file. "
+                    "Same block that applies to read_file."
+                )

@@ -72,6 +72,41 @@ def test_path_confinement_runs_on_the_executor_side(executor):
         executor.execute("cat /etc/passwd")
 
 
+def test_a_path_hidden_in_a_write_flag_is_still_confined(executor, tmp_path):
+    # regression: --output=/abs/path skipped confinement because the token starts
+    # with '-'. `sort --output=<outside>` truncated a file outside the root.
+    victim = tmp_path / "outside" / "passwd.txt"
+    with pytest.raises(ToolError, match="outside the project root"):
+        executor.execute(f"sort --output={victim} notes.txt")
+    assert victim.read_text() == "root:x:0:0\n"  # untouched
+
+
+def test_a_path_hidden_in_a_read_flag_is_still_confined(executor):
+    # `grep --file=/etc/passwd` read a file outside the root as its pattern list.
+    with pytest.raises(ToolError, match="outside the project root"):
+        executor.execute("grep --file=/etc/passwd notes.txt")
+
+
+def test_git_diff_output_flag_cannot_escape_the_root(executor, tmp_path):
+    victim = tmp_path / "outside" / "passwd.txt"
+    with pytest.raises(ToolError, match="outside the project root"):
+        executor.execute(f"git diff --output={victim}")
+    assert victim.read_text() == "root:x:0:0\n"
+
+
+def test_a_short_joined_output_flag_is_confined(executor, tmp_path):
+    victim = tmp_path / "outside" / "passwd.txt"
+    with pytest.raises(ToolError, match="outside the project root"):
+        executor.execute(f"sort -o{victim} notes.txt")
+
+
+def test_an_in_root_write_flag_still_works(executor, project):
+    # the fix confines the value, it does not ban the flag: an in-root target is
+    # allowed, so legitimate use is not collateral damage.
+    executor.execute("sort --output=sorted.txt notes.txt")
+    assert (project / "sorted.txt").exists()
+
+
 def test_credential_files_are_refused_on_the_executor_side(executor):
     with pytest.raises(ToolError, match="credential"):
         executor.execute("cat .env")
