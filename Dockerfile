@@ -13,4 +13,4 @@ COPY secret_agent ./secret_agent
 # executor need. git is here so the executor's read-only git subcommands work.
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir -e ".[server]"
+    && pip install --no-cache-dir -e ".[server,hosted]"

@@ -6,4 +6,4 @@
 set -euo pipefail
 MODEL="${SA_VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}"
 PORT="${SA_VLLM_PORT:-8000}"
-exec python -m vllm.entrypoints.openai.api_server --model "$MODEL" --port "$PORT"
+exec python3 -m vllm.entrypoints.openai.api_server --model "$MODEL" --port "$PORT"
