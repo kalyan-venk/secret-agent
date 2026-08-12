@@ -97,6 +97,10 @@ class Step:
     completion_tokens: int = 0
     compacted: bool = False
     elapsed_s: float = 0.0
+    # just the model call, separate from elapsed_s (which also covers the tool
+    # runs). The observability tracer reports both so a slow step can be pinned
+    # on the model or on a tool. See observability/trace.py.
+    model_ms: float = 0.0
 
 
 @dataclass
@@ -178,6 +182,7 @@ class Agent:
             # just silently isn't there any more.
             step.compacted = self.ctx.ensure_fits(self.conversation)
 
+            t_model = time.perf_counter()
             completion = self.client.complete(
                 # WIRE_FORMAT is the client's own declaration of which wire
                 # shape it needs (see llm.py); Message.to_wire() does the
@@ -187,6 +192,7 @@ class Agent:
                 self.conversation.to_wire(provider=getattr(self.client, "WIRE_FORMAT", "ollama")),
                 tools=self.registry.schemas() if self.cfg.tool_mode == "native" else None,
             )
+            step.model_ms = (time.perf_counter() - t_model) * 1000
             step.prompt_tokens = completion.usage.prompt_tokens
             step.completion_tokens = completion.usage.completion_tokens
             step.completion_text = completion.text
