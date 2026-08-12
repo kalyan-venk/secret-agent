@@ -1,11 +1,20 @@
-# Self-hosted Qdrant for the RAG store. No account, no cloud, no key.
+# Three services: the RAG vector store, the executor node, and the orchestrator.
 #
-#   docker compose up -d qdrant
-#   curl -s localhost:6333/readyz   # -> OK
+#   docker compose up qdrant             # just the vector store (RAG only)
+#   docker compose up executor orchestrator
 #
-# 6333 is the REST/HTTP port the qdrant-client uses by default; 6334 is gRPC.
-# The named volume persists the collection so a restart does not lose the
-# embedded corpus. Everything the RAG layer needs is local and reproducible.
+# The split that matters is executor vs orchestrator. After the sandbox escape
+# (see the README and MISTAKES.md), untrusted command execution must not run in
+# the process that holds the model keys and the conversation. So the bash tool's
+# execution path runs as its own service (secret_agent.executor.service) that
+# the orchestrator reaches over HTTP at SA_EXECUTOR_URL. It is localhost-shaped
+# here but genuinely a second node: give `executor` its own host and the design
+# does not change. The executor's port is NOT published -- only the orchestrator
+# talks to it, and SA_EXECUTOR_KEY gates that.
+#
+# The orchestrator needs a chat model. The default below points at a hosted
+# OpenAI-compatible provider (set GROQ_API_KEY); to use a local Ollama instead,
+# add an ollama service or set SA_HOST to a reachable one.
 services:
   qdrant:
     image: qdrant/qdrant:v1.12.4
@@ -15,6 +24,40 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_storage:/qdrant/storage
+
+  executor:
+    build: .
+    container_name: secret-agent-executor
+    command: uvicorn secret_agent.executor.service:app --host 0.0.0.0 --port 8090
+    environment:
+      # a missing key makes the executor refuse every request (fail closed)
+      SA_EXECUTOR_KEY: ${SA_EXECUTOR_KEY:-change-me}
+      SA_ROOT: /work
+      SA_EXECUTOR_LOG: "1"
+    volumes:
+      # what this node is allowed to touch, and nothing else
+      - ./workdir:/work
+    expose:
+      - "8090"
+
+  orchestrator:
+    build: .
+    container_name: secret-agent-orchestrator
+    command: uvicorn secret_agent.server:app --host 0.0.0.0 --port 8080
+    environment:
+      SA_SERVER_API_KEY: ${SA_SERVER_API_KEY:-change-me}
+      SA_SERVER_SHELL: "1"
+      SA_EXECUTOR_URL: http://executor:8090
+      SA_EXECUTOR_KEY: ${SA_EXECUTOR_KEY:-change-me}
+      SA_ROOT: /work
+      LLM_PROVIDER: ${LLM_PROVIDER:-hosted}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    depends_on:
+      - executor
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./workdir:/work
 
 volumes:
   qdrant_storage:

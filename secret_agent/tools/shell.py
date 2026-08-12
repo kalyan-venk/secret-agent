@@ -60,18 +60,28 @@ this tool asks for confirmation by default and must keep doing so.
 
 Env scrubbing is likewise oversold if you read it as credential isolation. HOME
 is still forwarded, and `~/.aws/credentials` is a file, not an env var.
+
+## Where the execution actually happens
+
+The validate -> confine -> spawn code used to sit in this file and run in the
+agent process. It now lives in `executor/core.py::run_command`, and this tool is
+a thin front for it. When SA_EXECUTOR_URL is set, `run()` sends the command to a
+separate executor node over HTTP (executor/client.py) instead of spawning a
+subprocess here, so untrusted commands do not run in the process that holds the
+model keys and the conversation. With SA_EXECUTOR_URL unset it calls the same
+`run_command` in-process, so the local path and the remote path share one body
+of code and cannot drift in what they allow. See executor/core.py.
 """
 
 from __future__ import annotations
 
 import os
-import shlex
-import subprocess
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
 from ..config import Config
+from ..executor.core import ALLOWED
 from .base import Tool, ToolError
 
 _CFG = Config.from_env()
@@ -79,76 +89,6 @@ _CFG = Config.from_env()
 
 def _root() -> Path:
     return Path(os.environ.get("SA_ROOT", _CFG.root)).resolve()
-
-
-# Read-only-ish things that are genuinely useful to an agent.
-#
-# NO INTERPRETERS. python/python3/pytest were here and were a total sandbox
-# escape -- see the module docstring. node, ruby, perl, sh, bash, awk, sed -e
-# and env belong in the same category and are not coming back. If you want to
-# run the test suite, run it yourself; the agent does not need to.
-#
-# `find` is here under protest. `-exec` is an interpreter in disguise, so it's
-# rejected explicitly in BANNED_FLAGS below. That is a blocklist inside an
-# allowlist, which is exactly the smell the docstring warns about -- it stays
-# only because listing directories is genuinely useful and `list_dir`/`grep`
-# cover most of it. Consider dropping `find` entirely.
-ALLOWED = {
-    "ls", "cat", "head", "tail", "wc", "file", "stat",
-    "find", "grep", "rg", "sort", "uniq", "cut", "tr",
-    "git", "echo", "pwd", "date", "which",
-}
-
-# Flags that turn an allowlisted program back into an arbitrary-execution
-# primitive. Not exhaustive and cannot be -- that is the point made in the
-# docstring, and the reason this tool asks before running.
-BANNED_FLAGS = {
-    "-exec", "-execdir", "-ok", "-okdir",       # find
-    "-fprint", "-fprintf", "-fls",              # find, writes anywhere
-    "--exec-path", "--upload-pack",             # git
-    "-c", "--command",                          # anything shell-shaped
-    "--use-compress-program",                   # git/tar
-}
-
-# git subcommands that are safe to run unattended
-GIT_READONLY = {"status", "log", "diff", "show", "branch", "ls-files",
-                "rev-parse", "describe", "blame", "remote"}
-
-# Checked per-token after shlex.split, NOT against the raw string -- see the
-# note in run(). Redundant with shell=False; kept for the error message.
-METACHARS = frozenset({";", "&&", "||", "|", "`", ">", ">>", "<", "&"})
-
-# Substrings that mean the model is writing shell even mid-token: `ls;`,
-# `echo `whoami``, `echo $(cat .env)`. Only checked on UNQUOTED tokens.
-_EMBEDDED_SHELL = ("`", "$(", ";", "|", ">", "<", "&")
-
-TIMEOUT_S = 30
-MAX_OUTPUT = 8000
-
-
-def _looks_like_path(arg: str) -> bool:
-    """Thin wrapper over sandbox.looks_like_path.
-
-    The one implementation lives in sandbox.py so bash and the MCP adapter
-    share it verbatim and cannot drift -- see MISTAKES.md #13. Kept as a local
-    name only because run() and the tests reference it.
-    """
-    from ..sandbox import looks_like_path
-    return looks_like_path(arg, _root())
-
-
-def _check_paths(args: list[str], root: Path) -> None:
-    """Thin wrapper over sandbox.confine_paths -- the single confiner.
-
-    Confines every path-shaped argument, or raises. Reuses safe_resolve so
-    bash gets exactly the same containment rule as read_file (traversal,
-    absolute escapes, symlinks out, percent-encoding, credential names). One
-    implementation, so the callers can't drift.
-    """
-    # imported here rather than at module scope: sandbox imports from
-    # tools.base, and a top-level import the other way is a cycle
-    from ..sandbox import confine_paths
-    confine_paths(args, root)
 
 
 class Bash(Tool):
@@ -163,106 +103,18 @@ Only these programs are permitted: """ + ", ".join(sorted(ALLOWED))
         command: str = Field(description="one command with its arguments, e.g. 'git status'")
 
     def run(self, command: str) -> str:
-        command = command.strip()
-        if not command:
-            raise ToolError("empty command")
+        url = os.environ.get("SA_EXECUTOR_URL")
+        if url:
+            # Route to the executor node. No local fallback on purpose: if the
+            # executor is down bash fails loudly rather than quietly running
+            # the command in this process, which is the thing the split exists
+            # to stop. See executor/client.py.
+            from ..executor.client import ExecutorClient
+            return ExecutorClient(url, key=os.environ.get("SA_EXECUTOR_KEY")).execute(command)
 
-        try:
-            argv = shlex.split(command)
-        except ValueError as e:
-            raise ToolError(f"couldn't parse command: {e}")
-
-        if not argv:
-            raise ToolError("empty command")
-
-        # Metachar check runs on TOKENS, after shlex.split, not on the raw
-        # string. The raw-string version rejected `grep "a || b" file`, where
-        # `||` is a literal search term inside a quoted argument and cannot
-        # possibly be an operator.
-        #
-        # The rule: a token containing whitespace came from quotes, so it is
-        # unambiguously DATA and is skipped. A bare token containing an
-        # operator is the model writing shell and expecting a shell.
-        #
-        # With shell=False none of these do anything anyway, so the check buys
-        # no security at all -- it buys a usable error message. `ls ; rm -rf /`
-        # otherwise becomes execve looking for a program named ";" and the
-        # model learns nothing from the result.
-        for tok in argv:
-            if any(c.isspace() for c in tok):
-                continue  # quoted -> data
-            if tok in METACHARS or any(m in tok for m in _EMBEDDED_SHELL):
-                raise ToolError(
-                    f"{tok!r} looks like shell syntax. This runs without a shell, "
-                    "so operators and substitutions have no effect. Run one "
-                    "command, or make several separate calls. To search for the "
-                    "characters literally, quote the whole pattern."
-                )
-
-        prog = Path(argv[0]).name  # /usr/bin/rm -> rm, so a path can't sneak past
-        if prog not in ALLOWED:
-            raise ToolError(
-                f"{prog!r} is not on the allowlist. Permitted: "
-                f"{', '.join(sorted(ALLOWED))}. "
-                "Interpreters (python, node, sh) are permanently excluded -- "
-                "they are arbitrary code execution regardless of arguments."
-            )
-
-        for a in argv[1:]:
-            flag = a.split("=", 1)[0]
-            if flag in BANNED_FLAGS:
-                raise ToolError(
-                    f"{flag!r} is not allowed -- it turns {prog} into a way to "
-                    "run arbitrary programs."
-                )
-
-        # The check that was missing entirely. Every path-shaped argument is
-        # confined to the project root, the same way read_file's is. Without
-        # this, `cat /etc/passwd` worked and the claim that permissions and
-        # confinement are independent layers was simply false for this tool.
-        _check_paths(argv[1:], _root())
-
-        if prog == "git":
-            sub = next((a for a in argv[1:] if not a.startswith("-")), None)
-            if sub not in GIT_READONLY:
-                raise ToolError(
-                    f"git {sub!r} is not permitted. Read-only subcommands only: "
-                    f"{', '.join(sorted(GIT_READONLY))}"
-                )
-
-        try:
-            proc = subprocess.run(
-                argv,
-                shell=False,          # the actual defense. do not change this.
-                cwd=_root(),
-                capture_output=True,
-                text=True,
-                timeout=TIMEOUT_S,
-                # Don't inherit the parent env wholesale -- it has API keys in
-                # it on most machines and a subprocess doesn't need them.
-                env={
-                    "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-                    "HOME": os.environ.get("HOME", ""),
-                    "LANG": os.environ.get("LANG", "C.UTF-8"),
-                },
-            )
-        except FileNotFoundError:
-            raise ToolError(f"{prog}: not found on this machine")
-        except subprocess.TimeoutExpired:
-            raise ToolError(f"{prog} didn't finish in {TIMEOUT_S}s and was killed")
-
-        out = (proc.stdout or "") + (("\n[stderr]\n" + proc.stderr) if proc.stderr else "")
-        out = out.strip()
-
-        if len(out) > MAX_OUTPUT:
-            out = out[:MAX_OUTPUT] + f"\n... truncated at {MAX_OUTPUT} chars"
-
-        if proc.returncode != 0:
-            # Non-zero is information, not a crash. `grep` returns 1 for "no
-            # matches" and the model needs to see that rather than an error.
-            return f"[exit {proc.returncode}]\n{out}" if out else f"[exit {proc.returncode}, no output]"
-
-        return out or "(no output)"
+        # In-process: same code the executor runs, just here.
+        from ..executor.core import run_command
+        return run_command(command, _root())
 
 
 SHELL_TOOLS = [Bash]
